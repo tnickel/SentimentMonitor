@@ -234,6 +234,100 @@ public class SentimentMonitor extends Application {
         Stage historyStage = new Stage();
         historyStage.setTitle("Historie: " + data.getAsset());
 
+        // Load data first
+        List<HistoryData> history = crawler.loadHistory(data.getAssetPath());
+
+        // Create chart
+        javafx.scene.chart.CategoryAxis xAxis = new javafx.scene.chart.CategoryAxis();
+        javafx.scene.chart.NumberAxis yAxis = new javafx.scene.chart.NumberAxis();
+        xAxis.setLabel("Datum");
+        yAxis.setLabel("Wahrscheinlichkeit (%)");
+        yAxis.setAutoRanging(false);
+        yAxis.setLowerBound(0);
+        yAxis.setUpperBound(100);
+
+        javafx.scene.chart.LineChart<String, Number> lineChart = new javafx.scene.chart.LineChart<>(xAxis, yAxis);
+        lineChart.setTitle("Prognose-Verlauf");
+        lineChart.setCreateSymbols(true);
+        lineChart.setLegendVisible(true);
+
+        // Create series
+        javafx.scene.chart.XYChart.Series<String, Number> seriesSteigt = new javafx.scene.chart.XYChart.Series<>();
+        seriesSteigt.setName("Steigt");
+
+        javafx.scene.chart.XYChart.Series<String, Number> seriesSeitwaerts = new javafx.scene.chart.XYChart.Series<>();
+        seriesSeitwaerts.setName("Seitwärts");
+
+        javafx.scene.chart.XYChart.Series<String, Number> seriesFaellt = new javafx.scene.chart.XYChart.Series<>();
+        seriesFaellt.setName("Fällt");
+
+        // Populate series
+        for (HistoryData hd : history) {
+            String date = hd.dateProperty().get();
+            int upVal = parsePercentage(hd.upProperty().get());
+            int sideVal = parsePercentage(hd.sidewaysProperty().get());
+            int downVal = parsePercentage(hd.downProperty().get());
+
+            seriesSteigt.getData().add(new javafx.scene.chart.XYChart.Data<>(date, upVal));
+            seriesSeitwaerts.getData().add(new javafx.scene.chart.XYChart.Data<>(date, sideVal));
+            seriesFaellt.getData().add(new javafx.scene.chart.XYChart.Data<>(date, downVal));
+        }
+
+        lineChart.getData().addAll(seriesSteigt, seriesSeitwaerts, seriesFaellt);
+
+        // Apply colors to series
+        seriesSteigt.getNode().setStyle("-fx-stroke: green;");
+        seriesSeitwaerts.getNode().setStyle("-fx-stroke: gray;");
+        seriesFaellt.getNode().setStyle("-fx-stroke: red;");
+
+        // Create toggle buttons
+        CheckBox cbSteigt = new CheckBox("Steigt (Grün)");
+        cbSteigt.setSelected(true);
+        cbSteigt.setStyle("-fx-text-fill: green;");
+        cbSteigt.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal) {
+                if (!lineChart.getData().contains(seriesSteigt)) {
+                    lineChart.getData().add(0, seriesSteigt);
+                }
+            } else {
+                lineChart.getData().remove(seriesSteigt);
+            }
+        });
+
+        CheckBox cbSeitwaerts = new CheckBox("Seitwärts (Grau)");
+        cbSeitwaerts.setSelected(true);
+        cbSeitwaerts.setStyle("-fx-text-fill: gray;");
+        cbSeitwaerts.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal) {
+                if (!lineChart.getData().contains(seriesSeitwaerts)) {
+                    lineChart.getData().add(seriesSeitwaerts);
+                }
+            } else {
+                lineChart.getData().remove(seriesSeitwaerts);
+            }
+        });
+
+        CheckBox cbFaellt = new CheckBox("Fällt (Rot)");
+        cbFaellt.setSelected(true);
+        cbFaellt.setStyle("-fx-text-fill: red;");
+        cbFaellt.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal) {
+                if (!lineChart.getData().contains(seriesFaellt)) {
+                    lineChart.getData().add(seriesFaellt);
+                }
+            } else {
+                lineChart.getData().remove(seriesFaellt);
+            }
+        });
+
+        javafx.scene.layout.HBox buttonBox = new javafx.scene.layout.HBox(10);
+        buttonBox.setPadding(new javafx.geometry.Insets(10));
+        buttonBox.getChildren().addAll(cbSteigt, cbSeitwaerts, cbFaellt);
+
+        javafx.scene.layout.VBox chartContainer = new javafx.scene.layout.VBox();
+        chartContainer.getChildren().addAll(buttonBox, lineChart);
+
+        // Create table
         TableView<HistoryData> historyTable = new TableView<>();
 
         TableColumn<HistoryData, String> colDate = new TableColumn<>("Datum");
@@ -250,17 +344,25 @@ public class SentimentMonitor extends Application {
         colDown.setCellValueFactory(new PropertyValueFactory<>("down"));
 
         historyTable.getColumns().addAll(colDate, colUp, colSide, colDown);
-
-        // Load data
-        List<HistoryData> history = crawler.loadHistory(data.getAssetPath());
         historyTable.setItems(FXCollections.observableArrayList(history));
 
-        BorderPane layout = new BorderPane();
-        layout.setCenter(historyTable);
+        // Create split pane
+        javafx.scene.control.SplitPane splitPane = new javafx.scene.control.SplitPane();
+        splitPane.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        splitPane.getItems().addAll(chartContainer, historyTable);
+        splitPane.setDividerPositions(0.6);
 
-        Scene scene = new Scene(layout, 600, 400);
+        Scene scene = new Scene(splitPane, 800, 700);
         historyStage.setScene(scene);
         historyStage.show();
+    }
+
+    private int parsePercentage(String percentStr) {
+        try {
+            return Integer.parseInt(percentStr.replace("%", "").trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private void loadData(String path) {
