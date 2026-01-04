@@ -32,25 +32,27 @@ public class SentimentCrawler {
         if (files == null)
             return;
 
-        // Check if this directory is an Asset folder (has "2tage" subdir)
-        File subDir = new File(directory, "2tage");
-        if (subDir.exists() && subDir.isDirectory()) {
-            processAssetFolder(directory, subDir, results);
+        // Check if this directory contains .txt files (new structure: files directly in
+        // asset folder)
+        File[] textFiles = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".txt"));
+        if (textFiles != null && textFiles.length > 0) {
+            // This is an asset folder with forecast files
+            processAssetFolder(directory, results);
         }
 
-        // Recursively continue
+        // Recursively continue searching subdirectories
         for (File f : files) {
-            if (f.isDirectory() && !f.getName().equals("2tage")) {
+            if (f.isDirectory()) {
                 findAssetFolders(f, results);
             }
         }
     }
 
-    private void processAssetFolder(File assetDir, File twoDaysDir, List<ForecastData> results) {
+    private void processAssetFolder(File assetDir, List<ForecastData> results) {
         String assetName = assetDir.getName();
 
-        // Find newest file in 2tage
-        File[] textFiles = twoDaysDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".txt"));
+        // Find newest .txt file in the asset directory
+        File[] textFiles = assetDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".txt"));
         if (textFiles == null || textFiles.length == 0)
             return;
 
@@ -68,11 +70,14 @@ public class SentimentCrawler {
                 ReportParser.DayForecast d1 = forecasts.get(0);
                 ReportParser.DayForecast d2 = (forecasts.size() > 1) ? forecasts.get(1)
                         : new ReportParser.DayForecast();
+                ReportParser.DayForecast d6m = (forecasts.size() > 2) ? forecasts.get(2)
+                        : new ReportParser.DayForecast();
 
                 ForecastData data = new ForecastData(
                         assetName, assetDir.getAbsolutePath(),
                         d1.date, d1.up, d1.sideways, d1.down,
-                        d2.date, d2.up, d2.sideways, d2.down);
+                        d2.date, d2.up, d2.sideways, d2.down,
+                        d6m.date, d6m.up, d6m.sideways, d6m.down);
                 results.add(data);
             }
 
@@ -84,17 +89,16 @@ public class SentimentCrawler {
     public List<HistoryData> loadHistory(String assetPath) {
         List<HistoryData> history = new ArrayList<>();
         File assetDir = new File(assetPath);
-        File twoDaysDir = new File(assetDir, "2tage");
 
-        if (!twoDaysDir.exists() || !twoDaysDir.isDirectory())
+        if (!assetDir.exists() || !assetDir.isDirectory())
             return history;
 
-        File[] textFiles = twoDaysDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".txt"));
+        // Read .txt files directly from asset directory
+        File[] textFiles = assetDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".txt"));
         if (textFiles == null)
             return history;
 
-        // We can optionally sort files by name or date, but we will just read all.
-        // Let's sort by name (date usually) if possible, or last modified.
+        // Sort by last modified descending
         Arrays.sort(textFiles, Comparator.comparingLong(File::lastModified).reversed());
 
         for (File file : textFiles) {
@@ -105,7 +109,7 @@ public class SentimentCrawler {
                 List<ReportParser.DayForecast> parsed = parser.parseContent(content);
                 for (ReportParser.DayForecast pf : parsed) {
                     history.add(new HistoryData(
-                            pf.date, pf.up, pf.sideways, pf.down));
+                            pf.date, pf.up, pf.sideways, pf.down, file.getAbsolutePath()));
                 }
             } catch (IOException e) {
                 e.printStackTrace();

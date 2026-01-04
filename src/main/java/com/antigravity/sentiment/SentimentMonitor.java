@@ -49,7 +49,7 @@ public class SentimentMonitor extends Application {
         table.setItems(tableData);
         root.setCenter(table);
 
-        Scene scene = new Scene(root, 1050, 600); // Widened slightly for new column
+        Scene scene = new Scene(root, 1350, 600); // Widened for 6 Monate column
         primaryStage.setScene(scene);
         primaryStage.show();
 
@@ -212,8 +212,21 @@ public class SentimentMonitor extends Application {
 
         colDay2.getColumns().addAll(colDate2, colUp2, colSide2, colDown2);
 
+        // 6 Monate
+        TableColumn<ForecastData, String> col6m = new TableColumn<>("6 Monate");
+        TableColumn<ForecastData, String> colDate6m = new TableColumn<>("Datum");
+        colDate6m.setCellValueFactory(new PropertyValueFactory<>("date6m"));
+        TableColumn<ForecastData, String> colUp6m = new TableColumn<>("Steigt %");
+        colUp6m.setCellValueFactory(new PropertyValueFactory<>("up6m"));
+        TableColumn<ForecastData, String> colSide6m = new TableColumn<>("Seitw. %");
+        colSide6m.setCellValueFactory(new PropertyValueFactory<>("sideways6m"));
+        TableColumn<ForecastData, String> colDown6m = new TableColumn<>("Fällt %");
+        colDown6m.setCellValueFactory(new PropertyValueFactory<>("down6m"));
+
+        col6m.getColumns().addAll(colDate6m, colUp6m, colSide6m, colDown6m);
+
         // Add columns (including new Ampel)
-        table.getColumns().addAll(colAsset, colAmpel, colDay1, colDay2);
+        table.getColumns().addAll(colAsset, colAmpel, colDay1, colDay2, col6m);
 
         // Double-click interaction
         table.setRowFactory(tv -> {
@@ -275,50 +288,32 @@ public class SentimentMonitor extends Application {
 
         lineChart.getData().addAll(seriesSteigt, seriesSeitwaerts, seriesFaellt);
 
-        // Apply colors to series
-        seriesSteigt.getNode().setStyle("-fx-stroke: green;");
-        seriesSeitwaerts.getNode().setStyle("-fx-stroke: gray;");
-        seriesFaellt.getNode().setStyle("-fx-stroke: red;");
-
         // Create toggle buttons
         CheckBox cbSteigt = new CheckBox("Steigt (Grün)");
         cbSteigt.setSelected(true);
         cbSteigt.setStyle("-fx-text-fill: green;");
         cbSteigt.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal) {
-                if (!lineChart.getData().contains(seriesSteigt)) {
-                    lineChart.getData().add(0, seriesSteigt);
-                }
-            } else {
-                lineChart.getData().remove(seriesSteigt);
-            }
+            toggleSeries(lineChart, seriesSteigt, newVal);
         });
 
         CheckBox cbSeitwaerts = new CheckBox("Seitwärts (Grau)");
         cbSeitwaerts.setSelected(true);
         cbSeitwaerts.setStyle("-fx-text-fill: gray;");
         cbSeitwaerts.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal) {
-                if (!lineChart.getData().contains(seriesSeitwaerts)) {
-                    lineChart.getData().add(seriesSeitwaerts);
-                }
-            } else {
-                lineChart.getData().remove(seriesSeitwaerts);
-            }
+            toggleSeries(lineChart, seriesSeitwaerts, newVal);
         });
 
         CheckBox cbFaellt = new CheckBox("Fällt (Rot)");
         cbFaellt.setSelected(true);
         cbFaellt.setStyle("-fx-text-fill: red;");
         cbFaellt.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal) {
-                if (!lineChart.getData().contains(seriesFaellt)) {
-                    lineChart.getData().add(seriesFaellt);
-                }
-            } else {
-                lineChart.getData().remove(seriesFaellt);
-            }
+            toggleSeries(lineChart, seriesFaellt, newVal);
         });
+
+        // Safe styling using helper
+        setSeriesStyle(seriesSteigt, "-fx-stroke: green; -fx-background-color: green, white;");
+        setSeriesStyle(seriesSeitwaerts, "-fx-stroke: gray; -fx-background-color: gray, white;");
+        setSeriesStyle(seriesFaellt, "-fx-stroke: red; -fx-background-color: red, white;");
 
         javafx.scene.layout.HBox buttonBox = new javafx.scene.layout.HBox(10);
         buttonBox.setPadding(new javafx.geometry.Insets(10));
@@ -346,15 +341,97 @@ public class SentimentMonitor extends Application {
         historyTable.getColumns().addAll(colDate, colUp, colSide, colDown);
         historyTable.setItems(FXCollections.observableArrayList(history));
 
+        // Add click handler for detailed analysis
+        historyTable.setRowFactory(tv -> {
+            TableRow<HistoryData> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 1 && !row.isEmpty()) {
+                    HistoryData rowData = row.getItem();
+                    String filePath = rowData.getSourceFilePath();
+                    if (filePath != null && !filePath.isEmpty()) {
+                        com.antigravity.sentiment.ui.AnalysisDetailWindow detailWindow = new com.antigravity.sentiment.ui.AnalysisDetailWindow();
+                        detailWindow.show(data.getAsset(), rowData.dateProperty().get(), filePath);
+                    } else {
+                        Alert alert = new Alert(Alert.AlertType.WARNING);
+                        alert.setTitle("Keine Details");
+                        alert.setHeaderText(null);
+                        alert.setContentText("Für diesen Eintrag sind keine Detail-Informationen verfügbar.");
+                        alert.showAndWait();
+                    }
+                }
+            });
+            return row;
+        });
+
+        // Create button bar
+        javafx.scene.layout.HBox buttonBar = new javafx.scene.layout.HBox();
+        buttonBar.setAlignment(javafx.geometry.Pos.BOTTOM_RIGHT);
+        buttonBar.setPadding(new javafx.geometry.Insets(10, 0, 0, 0));
+
+        Button btnShowSource = new Button("Quelltext anzeigen");
+        btnShowSource.setOnAction(e -> {
+            HistoryData selected = historyTable.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                showSourceFile(selected.getSourceFilePath());
+            } else {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Keine Auswahl");
+                alert.setHeaderText(null);
+                alert.setContentText("Bitte wählen Sie einen Eintrag aus der Tabelle.");
+                alert.showAndWait();
+            }
+        });
+        buttonBar.getChildren().add(btnShowSource);
+
+        // Container for table and button
+        javafx.scene.layout.VBox bottomContainer = new javafx.scene.layout.VBox();
+        bottomContainer.setPadding(new javafx.geometry.Insets(10));
+        bottomContainer.getChildren().addAll(historyTable, buttonBar);
+        javafx.scene.layout.VBox.setVgrow(historyTable, javafx.scene.layout.Priority.ALWAYS);
+
         // Create split pane
         javafx.scene.control.SplitPane splitPane = new javafx.scene.control.SplitPane();
         splitPane.setOrientation(javafx.geometry.Orientation.VERTICAL);
-        splitPane.getItems().addAll(chartContainer, historyTable);
+        splitPane.getItems().addAll(chartContainer, bottomContainer);
         splitPane.setDividerPositions(0.6);
 
         Scene scene = new Scene(splitPane, 800, 700);
         historyStage.setScene(scene);
         historyStage.show();
+    }
+
+    private void showSourceFile(String filePath) {
+        if (filePath == null || filePath.isEmpty()) {
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Keine Datei");
+            alert.setHeaderText(null);
+            alert.setContentText("Kein Dateipfad verfügbar.");
+            alert.showAndWait();
+            return;
+        }
+
+        try {
+            String content = java.nio.file.Files.readString(new File(filePath).toPath());
+
+            Stage sourceStage = new Stage();
+            sourceStage.setTitle("Quelltext: " + new File(filePath).getName());
+
+            TextArea textArea = new TextArea(content);
+            textArea.setEditable(false);
+            textArea.setWrapText(true);
+            textArea.setFont(javafx.scene.text.Font.font("Monospaced", 14));
+
+            Scene scene = new Scene(new javafx.scene.layout.StackPane(textArea), 600, 800);
+            sourceStage.setScene(scene);
+            sourceStage.show();
+
+        } catch (Exception e) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Fehler");
+            alert.setHeaderText("Fehler beim Laden der Datei");
+            alert.setContentText(e.getMessage());
+            alert.showAndWait();
+        }
     }
 
     private int parsePercentage(String percentStr) {
@@ -377,6 +454,33 @@ public class SentimentMonitor extends Application {
             alert.showAndWait();
         } else {
             tableData.addAll(data);
+        }
+    }
+
+    private void toggleSeries(javafx.scene.chart.LineChart<String, Number> chart,
+            javafx.scene.chart.XYChart.Series<String, Number> series, boolean show) {
+        if (show) {
+            if (!chart.getData().contains(series)) {
+                try {
+                    chart.getData().add(series);
+                } catch (IllegalArgumentException e) {
+                    // Ignorieren: Series ist bereits verbunden
+                }
+            }
+        } else {
+            chart.getData().remove(series);
+        }
+    }
+
+    private void setSeriesStyle(javafx.scene.chart.XYChart.Series<String, Number> series, String style) {
+        if (series.getNode() != null) {
+            series.getNode().setStyle(style);
+        } else {
+            series.nodeProperty().addListener((obs, oldNode, newNode) -> {
+                if (newNode != null) {
+                    newNode.setStyle(style);
+                }
+            });
         }
     }
 }

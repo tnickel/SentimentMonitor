@@ -19,9 +19,16 @@ public class ForecastData {
     private final StringProperty sideways2;
     private final StringProperty down2;
 
+    // 6 Monate
+    private final StringProperty date6m;
+    private final StringProperty up6m;
+    private final StringProperty sideways6m;
+    private final StringProperty down6m;
+
     public ForecastData(String asset, String assetPath,
             String date1, String up1, String sideways1, String down1,
-            String date2, String up2, String sideways2, String down2) {
+            String date2, String up2, String sideways2, String down2,
+            String date6m, String up6m, String sideways6m, String down6m) {
         this.asset = new SimpleStringProperty(asset);
         this.assetPath = assetPath;
         this.date1 = new SimpleStringProperty(date1);
@@ -33,6 +40,11 @@ public class ForecastData {
         this.up2 = new SimpleStringProperty(up2);
         this.sideways2 = new SimpleStringProperty(sideways2);
         this.down2 = new SimpleStringProperty(down2);
+
+        this.date6m = new SimpleStringProperty(date6m);
+        this.up6m = new SimpleStringProperty(up6m);
+        this.sideways6m = new SimpleStringProperty(sideways6m);
+        this.down6m = new SimpleStringProperty(down6m);
     }
 
     // Getters for properties (needed for TableView factories)
@@ -74,6 +86,22 @@ public class ForecastData {
 
     public StringProperty down2Property() {
         return down2;
+    }
+
+    public StringProperty date6mProperty() {
+        return date6m;
+    }
+
+    public StringProperty up6mProperty() {
+        return up6m;
+    }
+
+    public StringProperty sideways6mProperty() {
+        return sideways6m;
+    }
+
+    public StringProperty down6mProperty() {
+        return down6m;
     }
 
     // Standard Getters
