@@ -459,16 +459,15 @@ public class SentimentMonitor extends Application {
 
     private void toggleSeries(javafx.scene.chart.LineChart<String, Number> chart,
             javafx.scene.chart.XYChart.Series<String, Number> series, boolean show) {
-        if (show) {
-            if (!chart.getData().contains(series)) {
-                try {
-                    chart.getData().add(series);
-                } catch (IllegalArgumentException e) {
-                    // Ignorieren: Series ist bereits verbunden
+        // Use visibility to show/hide series without removing from chart to avoid
+        // exceptions
+        if (series.getNode() != null) {
+            series.getNode().setVisible(show);
+            for (javafx.scene.chart.XYChart.Data<String, Number> d : series.getData()) {
+                if (d.getNode() != null) {
+                    d.getNode().setVisible(show);
                 }
             }
-        } else {
-            chart.getData().remove(series);
         }
     }
 
