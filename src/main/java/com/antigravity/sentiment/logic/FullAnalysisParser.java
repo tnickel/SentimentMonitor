@@ -100,12 +100,21 @@ public class FullAnalysisParser {
                     ? content.substring(teil1Start, teil2Start)
                     : (teil1Start != -1 ? content.substring(teil1Start) : content);
 
-            // Extract first date entry (format: "Datum: 4. Januar 2026")
+            // Extract first date entry (format: "Datum: 4. Januar 2026" OR "Datum:
+            // 2026-01-04")
             Pattern datePattern = Pattern.compile("Datum:\\s*([\\d]+\\.\\s*[A-Za-zäöüÄÖÜß]+\\s*[\\d]{4})",
                     Pattern.CASE_INSENSITIVE);
             Matcher dateMatcher = datePattern.matcher(teil1Content);
+
             if (dateMatcher.find()) {
                 data.setDate(dateMatcher.group(1).trim());
+            } else {
+                // Determine ISO format
+                Pattern isoPattern = Pattern.compile("Datum:\\s*(\\d{4}-\\d{1,2}-\\d{1,2})");
+                Matcher isoMatcher = isoPattern.matcher(teil1Content);
+                if (isoMatcher.find()) {
+                    data.setDate(isoMatcher.group(1).trim());
+                }
             }
 
             // Extract probabilities from first entry

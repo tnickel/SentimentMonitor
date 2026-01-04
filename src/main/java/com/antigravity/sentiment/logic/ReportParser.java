@@ -22,6 +22,12 @@ public class ReportParser {
     private static final Pattern DATE_PATTERN = Pattern.compile(
             "(?:\\*\\*)?\\s*([A-Za-zäöüÄÖÜß]+).*?\\s*(\\d{1,2})\\.\\s*([A-Za-zäöüÄÖÜß]+)\\s*(\\d{4})(?:.*)?$");
 
+    /**
+     * Regex to capture ISO Date: "Datum: 2026-01-04"
+     */
+    private static final Pattern DATE_PATTERN_ISO = Pattern.compile(
+            "Datum:\\s*(\\d{4})-(\\d{1,2})-(\\d{1,2})");
+
     // Matches percentages for specific keywords
     private static final Pattern UP_PATTERN = Pattern.compile("steigt.*?:?\\s*(\\d+)%");
     private static final Pattern SIDE_PATTERN = Pattern.compile("seitwärts.*?:?\\s*(\\d+)%");
@@ -79,29 +85,48 @@ public class ReportParser {
             if (line.isEmpty())
                 continue;
 
-            // Try to match Date
-            Matcher dateMatcher = DATE_PATTERN.matcher(line);
-            if (dateMatcher.find()) {
-                String prefix = dateMatcher.group(1); // Montag, Datum, etc
-                String day = dateMatcher.group(2); // 5
-                String month = dateMatcher.group(3); // Januar
-                String year = dateMatcher.group(4); // 2026
+            // Check for explicit "Datum:" ISO format first
+            Matcher isoMatcher = DATE_PATTERN_ISO.matcher(line);
+            if (isoMatcher.find()) {
+                String year = isoMatcher.group(1);
+                String month = isoMatcher.group(2);
+                String day = isoMatcher.group(3);
 
-                // If "bis" is found, it's likely a range summary line -> Skip
-                if (line.toLowerCase().contains(" bis "))
-                    continue;
-
-                // Save previous forecast if exists
-                if (currentForecast != null) {
-                    if (currentForecast.hasData())
-                        results.add(currentForecast);
+                if (currentForecast != null && currentForecast.hasData()) {
+                    results.add(currentForecast);
                 }
 
                 currentForecast = new DayForecast();
-                currentForecast.date = formatDate(prefix, day, month, year);
+                // Format: 4.1.26 (Removing leading zero from month for consistency)
+                int m = Integer.parseInt(month);
+                currentForecast.date = day + "." + m + "." + year.substring(2);
+            }
+            // Check textual format
+            else {
+                // Try to match Date
+                Matcher dateMatcher = DATE_PATTERN.matcher(line);
+                if (dateMatcher.find()) {
+                    String prefix = dateMatcher.group(1); // Montag, Datum, etc
+                    String day = dateMatcher.group(2); // 5
+                    String month = dateMatcher.group(3); // Januar
+                    String year = dateMatcher.group(4); // 2026
 
-                // CRITICAL FIX: Do NOT continue here.
-                // The probability data might be on the SAME line as the date.
+                    // If "bis" is found, it's likely a range summary line -> Skip
+                    if (line.toLowerCase().contains(" bis "))
+                        continue;
+
+                    // Save previous forecast if exists
+                    if (currentForecast != null) {
+                        if (currentForecast.hasData())
+                            results.add(currentForecast);
+                    }
+
+                    currentForecast = new DayForecast();
+                    currentForecast.date = formatDate(prefix, day, month, year);
+
+                    // CRITICAL FIX: Do NOT continue here.
+                    // The probability data might be on the SAME line as the date.
+                }
             }
 
             // Try to match Stats (always check, in case it's on the same line or subsequent
