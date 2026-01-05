@@ -325,9 +325,22 @@ public class SentimentMonitor extends Application {
         // Create table
         TableView<HistoryData> historyTable = new TableView<>();
 
-        TableColumn<HistoryData, String> colDate = new TableColumn<>("Datum");
-        colDate.setCellValueFactory(new PropertyValueFactory<>("date"));
+        TableColumn<HistoryData, java.time.LocalDate> colDate = new TableColumn<>("Datum");
+        colDate.setCellValueFactory(new PropertyValueFactory<>("sortableDate"));
+        colDate.setCellFactory(column -> new TableCell<HistoryData, java.time.LocalDate>() {
+            @Override
+            protected void updateItem(java.time.LocalDate item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null || item.equals(java.time.LocalDate.MIN)) {
+                    setText(null);
+                } else {
+                    // Match original format: d.M.yy (e.g. 4.1.26)
+                    setText(item.format(java.time.format.DateTimeFormatter.ofPattern("d.M.yy")));
+                }
+            }
+        });
         colDate.setPrefWidth(150);
+        colDate.setSortType(TableColumn.SortType.DESCENDING);
 
         TableColumn<HistoryData, String> colUp = new TableColumn<>("Steigt");
         colUp.setCellValueFactory(new PropertyValueFactory<>("up"));
@@ -340,10 +353,27 @@ public class SentimentMonitor extends Application {
 
         historyTable.getColumns().addAll(colDate, colUp, colSide, colDown);
         historyTable.setItems(FXCollections.observableArrayList(history));
+        historyTable.getSortOrder().add(colDate);
 
-        // Add click handler for detailed analysis
+        // Add click handler for detailed analysis and style rows
         historyTable.setRowFactory(tv -> {
-            TableRow<HistoryData> row = new TableRow<>();
+            TableRow<HistoryData> row = new TableRow<>() {
+                @Override
+                protected void updateItem(HistoryData item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (item == null || empty) {
+                        setStyle("");
+                    } else {
+                        // Check if date is in the future
+                        if (item.getSortableDate().isAfter(java.time.LocalDate.now())) {
+                            setStyle("-fx-opacity: 0.5;");
+                        } else {
+                            setStyle("");
+                        }
+                    }
+                }
+            };
+
             row.setOnMouseClicked(event -> {
                 if (event.getClickCount() == 1 && !row.isEmpty()) {
                     HistoryData rowData = row.getItem();

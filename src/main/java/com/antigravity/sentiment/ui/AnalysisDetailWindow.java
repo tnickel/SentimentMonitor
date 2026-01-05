@@ -151,6 +151,7 @@ public class AnalysisDetailWindow {
         // Pie chart for weights
         PieChart pieChart = new PieChart();
         pieChart.setTitle("Gewichtungsverteilung");
+        pieChart.setMaxHeight(250);
 
         ComponentScore chart = analysisData.getCharttechnik();
         ComponentScore sent = analysisData.getSentiment();
@@ -167,7 +168,7 @@ public class AnalysisDetailWindow {
 
         // Table with component scores
         TableView<ComponentScore> table = new TableView<>();
-        table.setPrefHeight(200);
+        table.setPrefHeight(160);
 
         TableColumn<ComponentScore, String> nameCol = new TableColumn<>("Komponente");
         nameCol.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(data.getValue().getName()));
@@ -199,6 +200,21 @@ public class AnalysisDetailWindow {
         Label totalLabel = new Label("Gesamt Bullwahrscheinlichkeit: " + analysisData.getTotalBullProbability());
         totalLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
         vbox.getChildren().add(totalLabel);
+
+        // Calculation Details from text
+        String calcDetail = analysisData.getCalculationDetail();
+        if (calcDetail != null && !calcDetail.isEmpty()) {
+            Label calcLabel = new Label("Details zur Berechnung:");
+            calcLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
+
+            TextArea calcArea = new TextArea(calcDetail);
+            calcArea.setEditable(false);
+            calcArea.setWrapText(true);
+            calcArea.setPrefHeight(200);
+            VBox.setVgrow(calcArea, Priority.ALWAYS);
+
+            vbox.getChildren().addAll(calcLabel, calcArea);
+        }
 
         return vbox;
     }

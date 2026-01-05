@@ -19,6 +19,7 @@ public class FullAnalysisData {
     private ComponentScore sentiment;
     private ComponentScore makro;
     private String totalBullProbability;
+    private String calculationDetail; // New field for text explanation
 
     // TEIL 3: Trading Setup
     private TradingSetup tradingSetup;
@@ -45,6 +46,7 @@ public class FullAnalysisData {
         this.sentiment = new ComponentScore();
         this.makro = new ComponentScore();
         this.totalBullProbability = "0%";
+        this.calculationDetail = "";
 
         this.tradingSetup = new TradingSetup();
 
@@ -135,6 +137,14 @@ public class FullAnalysisData {
 
     public void setTotalBullProbability(String totalBullProbability) {
         this.totalBullProbability = totalBullProbability;
+    }
+
+    public String getCalculationDetail() {
+        return calculationDetail;
+    }
+
+    public void setCalculationDetail(String calculationDetail) {
+        this.calculationDetail = calculationDetail;
     }
 
     public TradingSetup getTradingSetup() {

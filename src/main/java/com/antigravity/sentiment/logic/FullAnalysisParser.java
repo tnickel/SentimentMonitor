@@ -15,37 +15,25 @@ public class FullAnalysisParser {
 
     // Patterns for TEIL 1 (with tolerance for variations)
     private static final Pattern SPOT_PRICE_PATTERN = Pattern.compile(
-            "(?:Spot[‑-]?(?:Referenz)?[‑-]?preis|Referenzpreis).*?[~≈]?\\s*([\\d,\\.]+)\\s*(?:USD|\\$)",
+            "(?:Spot[‑-]?(?:Referenz)?[‑-]?preis|Referenzpreis).*?[~≈]?\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
             Pattern.CASE_INSENSITIVE);
 
     // Patterns for TEIL 2 (Component scores)
-    private static final Pattern CHARTTECHNIK_PATTERN = Pattern.compile(
-            "Charttechnik.*?\\((\\d+)%.*?Gewicht\\).*?(?:Bull[‑-]?score|Score)\\s*(\\d+)%.*?Beitrag.*?(\\d+\\.\\d+)%",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-
-    private static final Pattern SENTIMENT_PATTERN = Pattern.compile(
-            "Sentiment.*?\\((\\d+)%.*?Gewicht\\).*?(?:Bull[‑-]?score|Score)\\s*(\\d+)%.*?Beitrag.*?(\\d+\\.\\d+)%",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-
-    private static final Pattern MAKRO_PATTERN = Pattern.compile(
-            "Makro.*?\\((\\d+)%.*?Gewicht\\).*?(?:Bull[‑-]?score|Score)\\s*(\\d+)%.*?Beitrag.*?(\\d+\\.\\d+)%",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-
     private static final Pattern TOTAL_BULL_PATTERN = Pattern.compile(
             "Gesamt\\s+Bullwahrscheinlichkeit.*?=\\s*([\\d\\.]+)%",
             Pattern.CASE_INSENSITIVE);
 
     // Patterns for TEIL 3 (Trading Setup)
     private static final Pattern ENTRY_PATTERN = Pattern.compile(
-            "Entry.*?:\\s*([\\d,\\.]+)\\s*(?:USD|\\$)",
+            "Entry.*?:\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
             Pattern.CASE_INSENSITIVE);
 
     private static final Pattern STOP_LOSS_PATTERN = Pattern.compile(
-            "Stop\\s*Loss.*?:\\s*([\\d,\\.]+)\\s*(?:USD|\\$)",
+            "Stop\\s*Loss.*?:\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
             Pattern.CASE_INSENSITIVE);
 
     private static final Pattern TAKE_PROFIT_PATTERN = Pattern.compile(
-            "Take\\s*Profit.*?:\\s*([\\d,\\.]+)\\s*(?:USD|\\$)",
+            "Take\\s*Profit.*?:\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
             Pattern.CASE_INSENSITIVE);
 
     private static final Pattern RISK_REWARD_PATTERN = Pattern.compile(
@@ -53,11 +41,11 @@ public class FullAnalysisParser {
             Pattern.CASE_INSENSITIVE);
 
     private static final Pattern RISK_PATTERN = Pattern.compile(
-            "Risk.*?[≈~]?\\s*([\\d,\\.]+)\\s*(?:USD|\\$)",
+            "Risk.*?[≈~]?\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
             Pattern.CASE_INSENSITIVE);
 
     private static final Pattern REWARD_PATTERN = Pattern.compile(
-            "Reward.*?[≈~]?\\s*([\\d,\\.]+)\\s*(?:USD|\\$)",
+            "Reward.*?[≈~]?\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
             Pattern.CASE_INSENSITIVE);
 
     /**
@@ -101,7 +89,7 @@ public class FullAnalysisParser {
                     : (teil1Start != -1 ? content.substring(teil1Start) : content);
 
             // Extract first date entry (format: "Datum: 4. Januar 2026" OR "Datum:
-            // 2026-01-04")
+            // 2026-01-04" OR "Datum: 05.01.2026")
             Pattern datePattern = Pattern.compile("Datum:\\s*([\\d]+\\.\\s*[A-Za-zäöüÄÖÜß]+\\s*[\\d]{4})",
                     Pattern.CASE_INSENSITIVE);
             Matcher dateMatcher = datePattern.matcher(teil1Content);
@@ -114,6 +102,13 @@ public class FullAnalysisParser {
                 Matcher isoMatcher = isoPattern.matcher(teil1Content);
                 if (isoMatcher.find()) {
                     data.setDate(isoMatcher.group(1).trim());
+                } else {
+                    // Determine German numeric format (DD.MM.YYYY)
+                    Pattern dePattern = Pattern.compile("Datum:\\s*(\\d{1,2}\\.\\d{1,2}\\.\\d{4})");
+                    Matcher deMatcher = dePattern.matcher(teil1Content);
+                    if (deMatcher.find()) {
+                        data.setDate(deMatcher.group(1).trim());
+                    }
                 }
             }
 
@@ -147,7 +142,16 @@ public class FullAnalysisParser {
             // Extract spot price
             Matcher spotMatcher = SPOT_PRICE_PATTERN.matcher(content);
             if (spotMatcher.find()) {
-                data.setSpotPrice(spotMatcher.group(1) + " USD");
+                // Try to guess unit if not present
+                String raw = spotMatcher.group(1);
+                String fullMatch = spotMatcher.group(0);
+                String unit = "USD"; // Default
+                if (fullMatch.contains("EUR") || fullMatch.contains("€"))
+                    unit = "EUR";
+                else if (fullMatch.contains("Punkte") || fullMatch.contains("Points"))
+                    unit = "Punkte";
+
+                data.setSpotPrice(raw + " " + unit);
             }
 
             // Extract sources (look for common source mentions)
@@ -160,6 +164,10 @@ public class FullAnalysisParser {
                 sources.append("Fed Minutes, ");
             if (content.contains("J.P. Morgan") || content.contains("JPM"))
                 sources.append("J.P. Morgan, ");
+
+            // Add BME for Spain
+            if (content.contains("BME") || content.contains("IBEX"))
+                sources.append("BME/IBEX, ");
 
             String sourcesStr = sources.toString();
             if (sourcesStr.endsWith(", ")) {
@@ -186,46 +194,136 @@ public class FullAnalysisParser {
                     : content.substring(teil2Start);
 
             // Parse Charttechnik
-            Matcher chartMatcher = CHARTTECHNIK_PATTERN.matcher(teil2Content);
-            if (chartMatcher.find()) {
-                ComponentScore chart = new ComponentScore(
-                        "Charttechnik",
-                        chartMatcher.group(1) + "%",
-                        chartMatcher.group(2) + "%",
-                        chartMatcher.group(3) + "%");
-                data.setCharttechnik(chart);
+            // Matches until next Header (Sentiment, Makro, Gesamt) starts at a new line
+            // with optional bullet
+            Pattern chartBlockPattern = Pattern.compile(
+                    "(?:^|\\n)\\s*[-•]?\\s*Charttechnik.*?(?=(?:^|\\n)\\s*[-•]?\\s*(?:Sentiment|Makro|Gesamt)|$)",
+                    Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+            Matcher cbM = chartBlockPattern.matcher(teil2Content);
+            if (cbM.find()) {
+                String block = cbM.group(0);
+                Pattern weightP = Pattern.compile("\\((\\d+)%.*?Gewicht\\)", Pattern.CASE_INSENSITIVE);
+                Pattern scoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up)\\s*(\\d+)%", Pattern.CASE_INSENSITIVE);
+                // Also support "0.60" format -> 60%
+                Pattern decScoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up|bullisch).*?→\\s*([0-9]\\.[0-9]+)",
+                        Pattern.CASE_INSENSITIVE);
+
+                Matcher wM = weightP.matcher(block);
+                Matcher sM = scoreP.matcher(block);
+                Matcher dSM = decScoreP.matcher(block);
+
+                if (wM.find()) {
+                    double weight = Double.parseDouble(wM.group(1));
+                    double score = 0;
+                    if (sM.find()) {
+                        score = Double.parseDouble(sM.group(1));
+                    } else if (dSM.find()) {
+                        score = Double.parseDouble(dSM.group(1)) * 100;
+                    }
+
+                    double contribution = weight * score / 100.0;
+                    data.setCharttechnik(new ComponentScore("Charttechnik", (int) weight + "%", (int) score + "%",
+                            String.format("%.1f%%", contribution).replace(",", ".")));
+                }
             }
 
             // Parse Sentiment
-            Matcher sentMatcher = SENTIMENT_PATTERN.matcher(teil2Content);
-            if (sentMatcher.find()) {
-                ComponentScore sent = new ComponentScore(
-                        "Sentiment",
-                        sentMatcher.group(1) + "%",
-                        sentMatcher.group(2) + "%",
-                        sentMatcher.group(3) + "%");
-                data.setSentiment(sent);
+            Pattern sentBlockPattern = Pattern.compile(
+                    "(?:^|\\n)\\s*[-•]?\\s*Sentiment.*?(?=(?:^|\\n)\\s*[-•]?\\s*(?:Makro|Gesamt)|$)",
+                    Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+            Matcher sbM = sentBlockPattern.matcher(teil2Content);
+            if (sbM.find()) {
+                String block = sbM.group(0);
+                Pattern weightP = Pattern.compile("\\((\\d+)%.*?Gewicht\\)", Pattern.CASE_INSENSITIVE);
+                Pattern scoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up)\\s*(\\d+)%", Pattern.CASE_INSENSITIVE);
+                Pattern decScoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up|bullisch).*?→\\s*([0-9]\\.[0-9]+)",
+                        Pattern.CASE_INSENSITIVE);
+
+                Matcher wM = weightP.matcher(block);
+                Matcher sM = scoreP.matcher(block);
+                Matcher dSM = decScoreP.matcher(block);
+
+                if (wM.find()) {
+                    double weight = Double.parseDouble(wM.group(1));
+                    double score = 0;
+                    if (sM.find()) {
+                        score = Double.parseDouble(sM.group(1));
+                    } else if (dSM.find()) {
+                        score = Double.parseDouble(dSM.group(1)) * 100;
+                    }
+
+                    double contribution = weight * score / 100.0;
+                    data.setSentiment(new ComponentScore("Sentiment", (int) weight + "%", (int) score + "%",
+                            String.format("%.1f%%", contribution).replace(",", ".")));
+                }
             }
 
             // Parse Makro
-            Matcher makroMatcher = MAKRO_PATTERN.matcher(teil2Content);
-            if (makroMatcher.find()) {
-                ComponentScore makro = new ComponentScore(
-                        "Makro/News",
-                        makroMatcher.group(1) + "%",
-                        makroMatcher.group(2) + "%",
-                        makroMatcher.group(3) + "%");
-                data.setMakro(makro);
+            Pattern makroBlockPattern = Pattern.compile(
+                    "(?:^|\\n)\\s*[-•]?\\s*Makro.*?(?=(?:^|\\n)\\s*[-•]?\\s*(?:Gesamt)|$)",
+                    Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+            Matcher mbM = makroBlockPattern.matcher(teil2Content);
+            if (mbM.find()) {
+                String block = mbM.group(0);
+                Pattern weightP = Pattern.compile("\\((\\d+)%.*?Gewicht\\)", Pattern.CASE_INSENSITIVE);
+                Pattern scoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up)\\s*(\\d+)%", Pattern.CASE_INSENSITIVE);
+                Pattern decScoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up|bullisch).*?→\\s*([0-9]\\.[0-9]+)",
+                        Pattern.CASE_INSENSITIVE);
+
+                Matcher wM = weightP.matcher(block);
+                Matcher sM = scoreP.matcher(block);
+                Matcher dSM = decScoreP.matcher(block);
+
+                if (wM.find()) {
+                    double weight = Double.parseDouble(wM.group(1));
+                    double score = 0;
+                    if (sM.find()) {
+                        score = Double.parseDouble(sM.group(1));
+                    } else if (dSM.find()) {
+                        score = Double.parseDouble(dSM.group(1)) * 100;
+                    }
+
+                    double contribution = weight * score / 100.0;
+                    data.setMakro(new ComponentScore("Makro/News", (int) weight + "%", (int) score + "%",
+                            String.format("%.1f%%", contribution).replace(",", ".")));
+                }
             }
 
             // Parse total bull probability
             Matcher totalMatcher = TOTAL_BULL_PATTERN.matcher(teil2Content);
             if (totalMatcher.find()) {
                 data.setTotalBullProbability(totalMatcher.group(1) + "%");
+            } else {
+                // FALLBACK: Calculate from contributions
+                double total = 0.0;
+                total += parsePercentage(data.getCharttechnik().getContribution());
+                total += parsePercentage(data.getSentiment().getContribution());
+                total += parsePercentage(data.getMakro().getContribution());
+
+                if (total > 0) {
+                    data.setTotalBullProbability(String.format("%.1f%%", total).replace(",", "."));
+                }
             }
+
+            // Extract detailed calculation text - USER REQUEST: FULL CONTENT WITHOUT
+            // FILTERING
+            // We strip the "TEIL 2" header if present to avoid redundancy, but keep
+            // everything else.
+            String rawCalculation = teil2Content.replaceFirst("(?i)TEIL\\s*2.*?[\\r\\n]+", "").trim();
+            data.setCalculationDetail(rawCalculation);
 
         } catch (Exception e) {
             System.err.println("Error parsing TEIL 2: " + e.getMessage());
+        }
+    }
+
+    private double parsePercentage(String val) {
+        if (val == null || val.isEmpty() || !val.contains("%"))
+            return 0.0;
+        try {
+            return Double.parseDouble(val.replace("%", "").trim());
+        } catch (Exception e) {
+            return 0.0;
         }
     }
 
@@ -247,19 +345,19 @@ public class FullAnalysisParser {
             // Parse Entry
             Matcher entryMatcher = ENTRY_PATTERN.matcher(teil3Content);
             if (entryMatcher.find()) {
-                setup.setEntry(entryMatcher.group(1) + " USD");
+                setup.setEntry(entryMatcher.group(1) + " " + determineUnit(entryMatcher.group(0)));
             }
 
             // Parse Stop Loss
             Matcher slMatcher = STOP_LOSS_PATTERN.matcher(teil3Content);
             if (slMatcher.find()) {
-                setup.setStopLoss(slMatcher.group(1) + " USD");
+                setup.setStopLoss(slMatcher.group(1) + " " + determineUnit(slMatcher.group(0)));
             }
 
             // Parse Take Profit
             Matcher tpMatcher = TAKE_PROFIT_PATTERN.matcher(teil3Content);
             if (tpMatcher.find()) {
-                setup.setTakeProfit(tpMatcher.group(1) + " USD");
+                setup.setTakeProfit(tpMatcher.group(1) + " " + determineUnit(tpMatcher.group(0)));
             }
 
             // Parse Risk/Reward
@@ -271,20 +369,33 @@ public class FullAnalysisParser {
             // Parse Risk
             Matcher riskMatcher = RISK_PATTERN.matcher(teil3Content);
             if (riskMatcher.find()) {
-                setup.setRisk(riskMatcher.group(1) + " USD");
+                setup.setRisk(riskMatcher.group(1) + " " + determineUnit(riskMatcher.group(0)));
             }
 
             // Parse Reward
             Matcher rewardMatcher = REWARD_PATTERN.matcher(teil3Content);
             if (rewardMatcher.find()) {
-                setup.setReward(rewardMatcher.group(1) + " USD");
+                setup.setReward(rewardMatcher.group(1) + " " + determineUnit(rewardMatcher.group(0)));
             }
 
-            // Parse Rationale (text after "Rationale:")
-            Pattern rationalPattern = Pattern.compile("Rationale?:\\s*(.+?)(?=\\n\\n|TEIL|$)", Pattern.DOTALL);
-            Matcher rationalMatcher = rationalPattern.matcher(teil3Content);
-            if (rationalMatcher.find()) {
-                setup.setRationale(rationalMatcher.group(1).trim());
+            // Parse Rationale/Logic
+            // Priority 1: Detailed logic ("Kurz zur Logik", "Rationale")
+            Pattern detailedLogicPattern = Pattern.compile(
+                    "(?:Rationale|Kurz\\s*zur\\s*Logik|Logic).*?:\\s*(.+?)(?=\\n\\n|TEIL|$)",
+                    Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
+            Matcher detailedMatcher = detailedLogicPattern.matcher(teil3Content);
+
+            if (detailedMatcher.find()) {
+                setup.setRationale(detailedMatcher.group(1).trim());
+            } else {
+                // Priority 2: Short setup summary ("Setup-Ansatz")
+                Pattern setupPattern = Pattern.compile(
+                        "(?:Setup[‑-]Ansatz|Setup).*?:\\s*(.+?)(?=\\n\\n|TEIL|$)",
+                        Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
+                Matcher setupMatcher = setupPattern.matcher(teil3Content);
+                if (setupMatcher.find()) {
+                    setup.setRationale(setupMatcher.group(1).trim());
+                }
             }
 
             // Determine Direction
@@ -368,6 +479,20 @@ public class FullAnalysisParser {
             System.err.println("Error extracting section: " + e.getMessage());
         }
         return "";
+    }
+
+    /**
+     * Helper to determine unit from matching text.
+     */
+    private String determineUnit(String text) {
+        if (text == null)
+            return "USD";
+        String lower = text.toLowerCase();
+        if (lower.contains("punkte") || lower.contains("points"))
+            return "Punkte";
+        if (lower.contains("eur") || lower.contains("€"))
+            return "EUR";
+        return "USD";
     }
 
 }

@@ -28,10 +28,39 @@ public class ReportParser {
     private static final Pattern DATE_PATTERN_ISO = Pattern.compile(
             "Datum:\\s*(\\d{4})-(\\d{1,2})-(\\d{1,2})");
 
+    /**
+     * Regex to capture German Numeric Date: "Datum: 05.01.2026"
+     */
+    private static final Pattern DATE_PATTERN_NUMERIC_DE = Pattern.compile(
+            "Datum:\\s*(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})");
+
     // Matches percentages for specific keywords
-    private static final Pattern UP_PATTERN = Pattern.compile("steigt.*?:?\\s*(\\d+)%");
-    private static final Pattern SIDE_PATTERN = Pattern.compile("seitwärts.*?:?\\s*(\\d+)%");
-    private static final Pattern DOWN_PATTERN = Pattern.compile("fällt.*?:?\\s*(\\d+)%");
+    // Matches percentages for specific keywords (Case insensitive)
+    // Strategy: Try PATTERN 1, if fail try PATTERN 2, etc. (Fallback logic)
+
+    private static final List<Pattern> UP_PATTERNS = new ArrayList<>();
+    private static final List<Pattern> SIDE_PATTERNS = new ArrayList<>();
+    private static final List<Pattern> DOWN_PATTERNS = new ArrayList<>();
+
+    static {
+        // UP Patterns
+        UP_PATTERNS.add(Pattern.compile("(?i)Wahrscheinlichkeit.*?steigt.*?:?\\s*(\\d+)%"));
+        UP_PATTERNS.add(Pattern.compile("(?i)steigt.*?:?\\s*(\\d+)%"));
+        UP_PATTERNS.add(Pattern.compile("(?i)bullisch.*?:?\\s*(\\d+)%"));
+        UP_PATTERNS.add(Pattern.compile("(?i)up.*?:?\\s*(\\d+)%"));
+
+        // SIDE Patterns
+        SIDE_PATTERNS.add(Pattern.compile("(?i)Wahrscheinlichkeit.*?seitwärts.*?:?\\s*(\\d+)%"));
+        SIDE_PATTERNS.add(Pattern.compile("(?i)seitwärts.*?:?\\s*(\\d+)%"));
+        SIDE_PATTERNS.add(Pattern.compile("(?i)neutral.*?:?\\s*(\\d+)%"));
+        SIDE_PATTERNS.add(Pattern.compile("(?i)flat.*?:?\\s*(\\d+)%"));
+
+        // DOWN Patterns
+        DOWN_PATTERNS.add(Pattern.compile("(?i)Wahrscheinlichkeit.*?fällt.*?:?\\s*(\\d+)%"));
+        DOWN_PATTERNS.add(Pattern.compile("(?i)fällt.*?:?\\s*(\\d+)%"));
+        DOWN_PATTERNS.add(Pattern.compile("(?i)bärisch.*?:?\\s*(\\d+)%"));
+        DOWN_PATTERNS.add(Pattern.compile("(?i)down.*?:?\\s*(\\d+)%"));
+    }
 
     // Month mapping for formatting
     private static final Map<String, String> MONTH_MAP = new HashMap<>();
@@ -87,6 +116,8 @@ public class ReportParser {
 
             // Check for explicit "Datum:" ISO format first
             Matcher isoMatcher = DATE_PATTERN_ISO.matcher(line);
+            Matcher deMatcher = DATE_PATTERN_NUMERIC_DE.matcher(line);
+
             if (isoMatcher.find()) {
                 String year = isoMatcher.group(1);
                 String month = isoMatcher.group(2);
@@ -100,6 +131,22 @@ public class ReportParser {
                 // Format: 4.1.26 (Removing leading zero from month for consistency)
                 int m = Integer.parseInt(month);
                 currentForecast.date = day + "." + m + "." + year.substring(2);
+            }
+            // Check for explicit "Datum:" German Numeric format "05.01.2026"
+            else if (deMatcher.find()) {
+                String day = deMatcher.group(1);
+                String month = deMatcher.group(2);
+                String year = deMatcher.group(3);
+
+                if (currentForecast != null && currentForecast.hasData()) {
+                    results.add(currentForecast);
+                }
+
+                currentForecast = new DayForecast();
+                int d = Integer.parseInt(day);
+                int m = Integer.parseInt(month);
+                String shortYear = year.length() == 4 ? year.substring(2) : year;
+                currentForecast.date = d + "." + m + "." + shortYear;
             }
             // Check textual format
             else {
@@ -133,19 +180,19 @@ public class ReportParser {
             // lines)
             if (currentForecast != null) {
                 // Check Up
-                Matcher upM = UP_PATTERN.matcher(line);
-                if (upM.find())
-                    currentForecast.up = upM.group(1) + "%";
+                String upVal = findFirstMatch(line, UP_PATTERNS);
+                if (upVal != null)
+                    currentForecast.up = upVal + "%";
 
                 // Check Side
-                Matcher sideM = SIDE_PATTERN.matcher(line);
-                if (sideM.find())
-                    currentForecast.sideways = sideM.group(1) + "%";
+                String sideVal = findFirstMatch(line, SIDE_PATTERNS);
+                if (sideVal != null)
+                    currentForecast.sideways = sideVal + "%";
 
                 // Check Down
-                Matcher downM = DOWN_PATTERN.matcher(line);
-                if (downM.find())
-                    currentForecast.down = downM.group(1) + "%";
+                String downVal = findFirstMatch(line, DOWN_PATTERNS);
+                if (downVal != null)
+                    currentForecast.down = downVal + "%";
             }
         }
 
@@ -155,6 +202,16 @@ public class ReportParser {
         }
 
         return results;
+    }
+
+    private String findFirstMatch(String line, List<Pattern> patterns) {
+        for (Pattern p : patterns) {
+            Matcher m = p.matcher(line);
+            if (m.find()) {
+                return m.group(1);
+            }
+        }
+        return null;
     }
 
     private String formatDate(String prefix, String day, String monthName, String year) {
