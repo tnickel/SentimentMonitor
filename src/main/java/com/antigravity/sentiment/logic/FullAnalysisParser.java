@@ -1,498 +1,268 @@
 package com.antigravity.sentiment.logic;
 
 import com.antigravity.sentiment.model.FullAnalysisData;
-import com.antigravity.sentiment.model.FullAnalysisData.ComponentScore;
-import com.antigravity.sentiment.model.FullAnalysisData.TradingSetup;
-
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Parser for full analysis files with robust error handling.
- * Designed to handle variations in AI-generated content.
+ * Parser for new format full analysis files (Sections 0-4).
+ * Updated to support "Refined Format" variations.
  */
 public class FullAnalysisParser {
 
-    // Patterns for TEIL 1 (with tolerance for variations)
-    private static final Pattern SPOT_PRICE_PATTERN = Pattern.compile(
-            "(?:Spot[‑-]?(?:Referenz)?[‑-]?preis|Referenzpreis).*?[~≈]?\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
-            Pattern.CASE_INSENSITIVE);
+    // Regex for FXSSI (Old & New)
+    private static final Pattern FXSSI_RATIO_OLD = Pattern
+            .compile("Ratio \\(Long/Short\\):\\s*(\\d+)%\\s*/\\s*(\\d+)%");
+    private static final Pattern FXSSI_LONG_NEW = Pattern.compile("-\\s*Long Position:\\s*(\\d+)%");
+    private static final Pattern FXSSI_SHORT_NEW = Pattern.compile("-\\s*Short Position:\\s*(\\d+)%");
 
-    // Patterns for TEIL 2 (Component scores)
-    private static final Pattern TOTAL_BULL_PATTERN = Pattern.compile(
-            "Gesamt\\s+Bullwahrscheinlichkeit.*?=\\s*([\\d\\.]+)%",
-            Pattern.CASE_INSENSITIVE);
+    // Regex for probabilities in Section 1 (Old & New)
+    private static final Pattern TREND_START_PATTERN = Pattern.compile(
+            "(?i)(?:Wahrscheinlichkeit Trend-Start|Trend-Fortsetzungs-Risiko|Runaway-Trend Risiko).*?:\\s*(\\d+)%");
+    private static final Pattern RANGE_REV_PATTERN = Pattern
+            .compile("(?i)(?:Wahrscheinlichkeit Range/Reversion|Reversion-Wahrscheinlichkeit).*?:\\s*(\\d+)%");
+    private static final Pattern RANGE_STAB_PATTERN = Pattern
+            .compile("(?i)(?:Erwartete Range Stabilitaet|Range-Trading Chance).*?:\\s*(\\d+)%");
 
-    // Patterns for TEIL 3 (Trading Setup)
-    private static final Pattern ENTRY_PATTERN = Pattern.compile(
-            "Entry.*?:\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
-            Pattern.CASE_INSENSITIVE);
+    // Regex for basic properties
+    private static final Pattern CSV_SIGNAL_PATTERN = Pattern.compile("CSV_SIGNAL:\\s*(\\w+)");
+    private static final Pattern BIAS_PATTERN = Pattern.compile("(?:Ergebnis|Finaler)\\s*Bias:\\s*(.*?)(\\(|$)");
+    private static final Pattern DATE_PATTERN_ISO = Pattern.compile("Datum:\\s*(\\d{4}-\\d{2}-\\d{2})");
 
-    private static final Pattern STOP_LOSS_PATTERN = Pattern.compile(
-            "Stop\\s*Loss.*?:\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
-            Pattern.CASE_INSENSITIVE);
-
-    private static final Pattern TAKE_PROFIT_PATTERN = Pattern.compile(
-            "Take\\s*Profit.*?:\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
-            Pattern.CASE_INSENSITIVE);
-
-    private static final Pattern RISK_REWARD_PATTERN = Pattern.compile(
-            "(?:Risiko[/\\s]*Chance|CRV|Risk[/\\s]*Reward).*?:\\s*([\\d\\.]+)\\s*:?\\s*1",
-            Pattern.CASE_INSENSITIVE);
-
-    private static final Pattern RISK_PATTERN = Pattern.compile(
-            "Risk.*?[≈~]?\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
-            Pattern.CASE_INSENSITIVE);
-
-    private static final Pattern REWARD_PATTERN = Pattern.compile(
-            "Reward.*?[≈~]?\\s*([\\d,\\.]+)(?:\\s*(?:USD|\\$|EUR|€|Punkte|Points))?",
-            Pattern.CASE_INSENSITIVE);
-
-    /**
-     * Parse the full analysis file content.
-     * Uses safe defaults if sections are missing or malformed.
-     */
     public FullAnalysisData parseFullAnalysis(String content) {
         FullAnalysisData data = new FullAnalysisData();
         data.setRawContent(content);
 
         try {
-            // Parse TEIL 1 (Statistical data)
-            parseTeil1(content, data);
-
-            // Parse TEIL 2 (Numerical derivation)
-            parseTeil2(content, data);
-
-            // Parse TEIL 3 (Trading setup)
-            parseTeil3(content, data);
-
-            // Parse TEIL 4 (Detailed reasoning)
-            parseTeil4(content, data);
-
+            parseSection0(content, data);
+            parseSection1(content, data);
+            parseSection2And3(content, data); // Derivation & Control
+            parseSection4(content, data); // Rationales
         } catch (Exception e) {
             System.err.println("Error parsing full analysis: " + e.getMessage());
             e.printStackTrace();
-            // Data object already has safe defaults
         }
-
         return data;
     }
 
-    private void parseTeil1(String content, FullAnalysisData data) {
+    private void parseSection0(String content, FullAnalysisData data) {
+        // Try precise block first, fallback to loose check
+        String section = extractSectionBlock(content, "### SECTION_0", "### SECTION_1");
+        // Fallback for ## SECTION_0 (if user used double hash instead of triple)
+        if (section.isEmpty())
+            section = extractSectionBlock(content, "## SECTION_0", "## SECTION_1");
+
+        if (section.isEmpty())
+            return;
+
+        // Try Old Format
+        Matcher mOld = FXSSI_RATIO_OLD.matcher(section);
+        if (mOld.find()) {
+            data.setFxssiLong(mOld.group(1) + "%");
+            data.setFxssiShort(mOld.group(2) + "%");
+            return;
+        }
+
+        // Try New Format
+        Matcher mLong = FXSSI_LONG_NEW.matcher(section);
+        Matcher mShort = FXSSI_SHORT_NEW.matcher(section);
+
+        if (mLong.find())
+            data.setFxssiLong(mLong.group(1) + "%");
+        if (mShort.find())
+            data.setFxssiShort(mShort.group(1) + "%");
+
+        // Extract Analyst Consensus
+        // Pattern: Starts with "ANALYSTEN-KONSENS" and goes until "KONFLIKT-ANALYSE" or
+        // "Technische Überdehnung"
+        Pattern consensusPattern = Pattern.compile(
+                "(?s)(ANALYSTEN-KONSENS.*?)(?=(?:KONFLIKT-ANALYSE|Technische Überdehnung|### SECTION|## SECTION|$))");
+        Matcher cm = consensusPattern.matcher(section);
+        if (cm.find()) {
+            data.setAnalystConsensus(cm.group(1).trim());
+
+            // Extract numeric consensus (e.g. "2 von 3")
+            Pattern numPat = Pattern.compile("Konsens:.*?(\\d+\\s+von\\s+\\d+)");
+            Matcher numM = numPat.matcher(cm.group(1));
+            if (numM.find()) {
+                data.setConsensusNumbers(numM.group(1));
+            }
+        }
+
+        // VIX
+        Matcher vixM = Pattern.compile("VIX Index:.*?([\\d\\.\\-]+)").matcher(section);
+        if (vixM.find())
+            data.setVix(vixM.group(1).trim());
+
+        // RSI
+        Matcher rsiM = Pattern.compile("RSI.*?:\\s*([\\d\\.]+)").matcher(section);
+        if (rsiM.find())
+            data.setRsi(rsiM.group(1).trim());
+
+        // ATR
+        Matcher atrM = Pattern.compile("ATR:.*?([\\d\\.]+)").matcher(section);
+        if (atrM.find())
+            data.setAtr(atrM.group(1).trim());
+    }
+
+    private void parseSection1(String content, FullAnalysisData data) {
+        String section = extractSectionBlock(content, "### SECTION_1", "### SECTION_2");
+        if (section.isEmpty())
+            section = extractSectionBlock(content, "## SECTION_1", "## SECTION_2"); // Fallback
+
+        if (section.isEmpty())
+            return;
+
+        // Date - Also check definition in Section 0 if missing here
+        Matcher dm = DATE_PATTERN_ISO.matcher(content); // Check full content for date to be safe
+        if (dm.find()) {
+            data.setDate(dm.group(1));
+        }
+
+        // Probabilities
+        Matcher rm = RANGE_REV_PATTERN.matcher(section);
+        Matcher tm = TREND_START_PATTERN.matcher(section);
+        Matcher rs = RANGE_STAB_PATTERN.matcher(section);
+
+        int side = 0;
+        int trend = 0;
+
+        StringBuilder calculationLog = new StringBuilder("Berechnungsgrundlage:\n");
+
+        // Priority for Sideways: Range-Trading Chance > Range Stabilitaet > Reversion
+        if (rs.find()) {
+            side = parsePercentage(rs.group(1));
+            calculationLog.append("- Gefunden: 'Range-Trading Chance/Stabilität' (").append(side)
+                    .append("%) -> Interpretiert als SEITWÄRTS.\n");
+        } else if (rm.find()) {
+            side = parsePercentage(rm.group(1));
+            calculationLog.append("- Gefunden: 'Reversion/Range' (").append(side)
+                    .append("%) -> Interpretiert als SEITWÄRTS.\n");
+        }
+
+        if (tm.find()) {
+            trend = parsePercentage(tm.group(1));
+            calculationLog.append("- Gefunden: 'Trend/Runaway Risiko' (").append(trend)
+                    .append("%) -> Aufgeteilt auf STEIGT/FÄLLT.\n");
+        }
+
+        data.setSidewaysProbability(side + "%");
+
+        if (trend > 0) {
+            int split = trend / 2;
+            data.setUpProbability(split + "%");
+            data.setDownProbability(split + "%");
+            calculationLog.append("  -> ").append(split).append("% Steigt, ").append(split)
+                    .append("% Fällt (Split).\n");
+        } else {
+            // Remainder split
+            int remainder = 100 - side;
+            if (remainder > 0) {
+                int split = remainder / 2;
+                data.setUpProbability(split + "%");
+                data.setDownProbability(split + "%");
+                calculationLog.append("- Rest (").append(remainder)
+                        .append("%) -> Aufgeteilt auf STEIGT/FÄLLT (Split).\n");
+                calculationLog.append("  -> ").append(split).append("% Steigt, ").append(split).append("% Fällt.\n");
+            }
+        }
+
+        data.setProbabilityCalculation(calculationLog.toString());
+    }
+
+    private void parseSection2And3(String content, FullAnalysisData data) {
+        String sec2 = extractSectionBlock(content, "### SECTION_2", "### SECTION_3");
+        if (sec2.isEmpty())
+            sec2 = extractSectionBlock(content, "## SECTION_2", "## SECTION_3");
+
+        String sec3 = extractSectionBlock(content, "### SECTION_3", "### SECTION_4");
+        if (sec3.isEmpty())
+            sec3 = extractSectionBlock(content, "## SECTION_3", "## SECTION_4");
+
+        StringBuilder combined = new StringBuilder();
+        if (!sec2.isEmpty()) {
+            combined.append("HERLEITUNG:\n").append(sec2).append("\n\n");
+
+            Matcher bm = BIAS_PATTERN.matcher(sec2);
+            if (bm.find())
+                data.setBias(bm.group(1).trim());
+
+            // Panic Check
+            Matcher pm = Pattern.compile("(?s)Panic Check:.*?Status:\\s*(.*?)(?=\\n)").matcher(sec2);
+            if (pm.find()) {
+                data.setPanicStatus(pm.group(1).trim());
+            }
+        }
+
+        if (!sec3.isEmpty()) {
+            combined.append("STEUERUNG:\n").append(sec3);
+
+            Matcher cm = CSV_SIGNAL_PATTERN.matcher(sec3);
+            if (cm.find())
+                data.setCsvSignal(cm.group(1).trim());
+        }
+
+        data.setDerivationText(combined.toString());
+    }
+
+    private void parseSection4(String content, FullAnalysisData data) {
+        String section = extractSectionBlock(content, "### SECTION_4", "END_OF_FILE");
+        if (section.isEmpty())
+            section = extractSectionBlock(content, "## SECTION_4", "END_OF_FILE");
+
+        if (section.isEmpty())
+            return;
+
+        Map<String, String> rationals = new LinkedHashMap<>();
+
+        // Split by "N) Title"
+        Pattern p = Pattern.compile("(?m)^\\d+\\)\\s*(.*?)$");
+        Matcher m = p.matcher(section);
+
+        int lastMatchEnd = -1;
+        String lastTitle = null;
+
+        while (m.find()) {
+            if (lastTitle != null) {
+                String body = section.substring(lastMatchEnd, m.start()).trim();
+                rationals.put(lastTitle, body);
+            }
+            lastTitle = m.group(1).trim();
+            lastMatchEnd = m.end();
+        }
+
+        if (lastTitle != null) {
+            String body = section.substring(lastMatchEnd).trim();
+            rationals.put(lastTitle, body);
+        }
+
+        data.setRationales(rationals);
+    }
+
+    private String extractSectionBlock(String content, String startTag, String nextTag) {
+        int start = content.indexOf(startTag);
+        if (start == -1)
+            return "";
+
+        int end = content.indexOf(nextTag, start);
+        if (end == -1)
+            end = content.length();
+
+        int headerEnd = content.indexOf('\n', start);
+        if (headerEnd != -1 && headerEnd < end) {
+            return content.substring(headerEnd + 1, end).trim();
+        }
+
+        return content.substring(start + startTag.length(), end).trim();
+    }
+
+    private int parsePercentage(String s) {
         try {
-            // Find TEIL 1 section
-            int teil1Start = content.indexOf("TEIL 1");
-            int teil2Start = content.indexOf("TEIL 2");
-
-            String teil1Content = (teil2Start > teil1Start && teil1Start != -1)
-                    ? content.substring(teil1Start, teil2Start)
-                    : (teil1Start != -1 ? content.substring(teil1Start) : content);
-
-            // Extract first date entry (format: "Datum: 4. Januar 2026" OR "Datum:
-            // 2026-01-04" OR "Datum: 05.01.2026")
-            Pattern datePattern = Pattern.compile("Datum:\\s*([\\d]+\\.\\s*[A-Za-zäöüÄÖÜß]+\\s*[\\d]{4})",
-                    Pattern.CASE_INSENSITIVE);
-            Matcher dateMatcher = datePattern.matcher(teil1Content);
-
-            if (dateMatcher.find()) {
-                data.setDate(dateMatcher.group(1).trim());
-            } else {
-                // Determine ISO format
-                Pattern isoPattern = Pattern.compile("Datum:\\s*(\\d{4}-\\d{1,2}-\\d{1,2})");
-                Matcher isoMatcher = isoPattern.matcher(teil1Content);
-                if (isoMatcher.find()) {
-                    data.setDate(isoMatcher.group(1).trim());
-                } else {
-                    // Determine German numeric format (DD.MM.YYYY)
-                    Pattern dePattern = Pattern.compile("Datum:\\s*(\\d{1,2}\\.\\d{1,2}\\.\\d{4})");
-                    Matcher deMatcher = dePattern.matcher(teil1Content);
-                    if (deMatcher.find()) {
-                        data.setDate(deMatcher.group(1).trim());
-                    }
-                }
-            }
-
-            // Extract probabilities from first entry
-            // Pattern: "Wahrscheinlichkeit, dass Gold steigt: 44%"
-            Pattern upPattern = Pattern.compile(
-                    "Wahrscheinlichkeit.*?steigt.*?:\\s*(\\d+)%",
-                    Pattern.CASE_INSENSITIVE);
-            Pattern sidePattern = Pattern.compile(
-                    "Wahrscheinlichkeit.*?seitwärts.*?:\\s*(\\d+)%",
-                    Pattern.CASE_INSENSITIVE);
-            Pattern downPattern = Pattern.compile(
-                    "Wahrscheinlichkeit.*?fällt.*?:\\s*(\\d+)%",
-                    Pattern.CASE_INSENSITIVE);
-
-            Matcher upMatcher = upPattern.matcher(teil1Content);
-            if (upMatcher.find()) {
-                data.setUpProbability(upMatcher.group(1) + "%");
-            }
-
-            Matcher sideMatcher = sidePattern.matcher(teil1Content);
-            if (sideMatcher.find()) {
-                data.setSidewaysProbability(sideMatcher.group(1) + "%");
-            }
-
-            Matcher downMatcher = downPattern.matcher(teil1Content);
-            if (downMatcher.find()) {
-                data.setDownProbability(downMatcher.group(1) + "%");
-            }
-
-            // Extract spot price
-            Matcher spotMatcher = SPOT_PRICE_PATTERN.matcher(content);
-            if (spotMatcher.find()) {
-                // Try to guess unit if not present
-                String raw = spotMatcher.group(1);
-                String fullMatch = spotMatcher.group(0);
-                String unit = "USD"; // Default
-                if (fullMatch.contains("EUR") || fullMatch.contains("€"))
-                    unit = "EUR";
-                else if (fullMatch.contains("Punkte") || fullMatch.contains("Points"))
-                    unit = "Punkte";
-
-                data.setSpotPrice(raw + " " + unit);
-            }
-
-            // Extract sources (look for common source mentions)
-            StringBuilder sources = new StringBuilder();
-            if (content.contains("FXSSI"))
-                sources.append("FXSSI, ");
-            if (content.contains("TradingView"))
-                sources.append("TradingView, ");
-            if (content.contains("Fed"))
-                sources.append("Fed Minutes, ");
-            if (content.contains("J.P. Morgan") || content.contains("JPM"))
-                sources.append("J.P. Morgan, ");
-
-            // Add BME for Spain
-            if (content.contains("BME") || content.contains("IBEX"))
-                sources.append("BME/IBEX, ");
-
-            String sourcesStr = sources.toString();
-            if (sourcesStr.endsWith(", ")) {
-                sourcesStr = sourcesStr.substring(0, sourcesStr.length() - 2);
-            }
-            data.setSources(sourcesStr);
-
+            return Integer.parseInt(s.replace("%", "").trim());
         } catch (Exception e) {
-            System.err.println("Error parsing TEIL 1: " + e.getMessage());
+            return 0;
         }
     }
-
-    private void parseTeil2(String content, FullAnalysisData data) {
-        try {
-            // Find TEIL 2 section
-            int teil2Start = content.indexOf("TEIL 2");
-            int teil3Start = content.indexOf("TEIL 3");
-
-            if (teil2Start == -1)
-                return;
-
-            String teil2Content = (teil3Start > teil2Start)
-                    ? content.substring(teil2Start, teil3Start)
-                    : content.substring(teil2Start);
-
-            // Parse Charttechnik
-            // Matches until next Header (Sentiment, Makro, Gesamt) starts at a new line
-            // with optional bullet
-            Pattern chartBlockPattern = Pattern.compile(
-                    "(?:^|\\n)\\s*[-•]?\\s*Charttechnik.*?(?=(?:^|\\n)\\s*[-•]?\\s*(?:Sentiment|Makro|Gesamt)|$)",
-                    Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-            Matcher cbM = chartBlockPattern.matcher(teil2Content);
-            if (cbM.find()) {
-                String block = cbM.group(0);
-                Pattern weightP = Pattern.compile("\\((\\d+)%.*?Gewicht\\)", Pattern.CASE_INSENSITIVE);
-                Pattern scoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up)\\s*(\\d+)%", Pattern.CASE_INSENSITIVE);
-                // Also support "0.60" format -> 60%
-                Pattern decScoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up|bullisch).*?→\\s*([0-9]\\.[0-9]+)",
-                        Pattern.CASE_INSENSITIVE);
-
-                Matcher wM = weightP.matcher(block);
-                Matcher sM = scoreP.matcher(block);
-                Matcher dSM = decScoreP.matcher(block);
-
-                if (wM.find()) {
-                    double weight = Double.parseDouble(wM.group(1));
-                    double score = 0;
-                    if (sM.find()) {
-                        score = Double.parseDouble(sM.group(1));
-                    } else if (dSM.find()) {
-                        score = Double.parseDouble(dSM.group(1)) * 100;
-                    }
-
-                    double contribution = weight * score / 100.0;
-                    data.setCharttechnik(new ComponentScore("Charttechnik", (int) weight + "%", (int) score + "%",
-                            String.format("%.1f%%", contribution).replace(",", ".")));
-                }
-            }
-
-            // Parse Sentiment
-            Pattern sentBlockPattern = Pattern.compile(
-                    "(?:^|\\n)\\s*[-•]?\\s*Sentiment.*?(?=(?:^|\\n)\\s*[-•]?\\s*(?:Makro|Gesamt)|$)",
-                    Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-            Matcher sbM = sentBlockPattern.matcher(teil2Content);
-            if (sbM.find()) {
-                String block = sbM.group(0);
-                Pattern weightP = Pattern.compile("\\((\\d+)%.*?Gewicht\\)", Pattern.CASE_INSENSITIVE);
-                Pattern scoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up)\\s*(\\d+)%", Pattern.CASE_INSENSITIVE);
-                Pattern decScoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up|bullisch).*?→\\s*([0-9]\\.[0-9]+)",
-                        Pattern.CASE_INSENSITIVE);
-
-                Matcher wM = weightP.matcher(block);
-                Matcher sM = scoreP.matcher(block);
-                Matcher dSM = decScoreP.matcher(block);
-
-                if (wM.find()) {
-                    double weight = Double.parseDouble(wM.group(1));
-                    double score = 0;
-                    if (sM.find()) {
-                        score = Double.parseDouble(sM.group(1));
-                    } else if (dSM.find()) {
-                        score = Double.parseDouble(dSM.group(1)) * 100;
-                    }
-
-                    double contribution = weight * score / 100.0;
-                    data.setSentiment(new ComponentScore("Sentiment", (int) weight + "%", (int) score + "%",
-                            String.format("%.1f%%", contribution).replace(",", ".")));
-                }
-            }
-
-            // Parse Makro
-            Pattern makroBlockPattern = Pattern.compile(
-                    "(?:^|\\n)\\s*[-•]?\\s*Makro.*?(?=(?:^|\\n)\\s*[-•]?\\s*(?:Gesamt)|$)",
-                    Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-            Matcher mbM = makroBlockPattern.matcher(teil2Content);
-            if (mbM.find()) {
-                String block = mbM.group(0);
-                Pattern weightP = Pattern.compile("\\((\\d+)%.*?Gewicht\\)", Pattern.CASE_INSENSITIVE);
-                Pattern scoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up)\\s*(\\d+)%", Pattern.CASE_INSENSITIVE);
-                Pattern decScoreP = Pattern.compile("(?:Bull[‑-]?score|Score|Up|bullisch).*?→\\s*([0-9]\\.[0-9]+)",
-                        Pattern.CASE_INSENSITIVE);
-
-                Matcher wM = weightP.matcher(block);
-                Matcher sM = scoreP.matcher(block);
-                Matcher dSM = decScoreP.matcher(block);
-
-                if (wM.find()) {
-                    double weight = Double.parseDouble(wM.group(1));
-                    double score = 0;
-                    if (sM.find()) {
-                        score = Double.parseDouble(sM.group(1));
-                    } else if (dSM.find()) {
-                        score = Double.parseDouble(dSM.group(1)) * 100;
-                    }
-
-                    double contribution = weight * score / 100.0;
-                    data.setMakro(new ComponentScore("Makro/News", (int) weight + "%", (int) score + "%",
-                            String.format("%.1f%%", contribution).replace(",", ".")));
-                }
-            }
-
-            // Parse total bull probability
-            Matcher totalMatcher = TOTAL_BULL_PATTERN.matcher(teil2Content);
-            if (totalMatcher.find()) {
-                data.setTotalBullProbability(totalMatcher.group(1) + "%");
-            } else {
-                // FALLBACK: Calculate from contributions
-                double total = 0.0;
-                total += parsePercentage(data.getCharttechnik().getContribution());
-                total += parsePercentage(data.getSentiment().getContribution());
-                total += parsePercentage(data.getMakro().getContribution());
-
-                if (total > 0) {
-                    data.setTotalBullProbability(String.format("%.1f%%", total).replace(",", "."));
-                }
-            }
-
-            // Extract detailed calculation text - USER REQUEST: FULL CONTENT WITHOUT
-            // FILTERING
-            // We strip the "TEIL 2" header if present to avoid redundancy, but keep
-            // everything else.
-            String rawCalculation = teil2Content.replaceFirst("(?i)TEIL\\s*2.*?[\\r\\n]+", "").trim();
-            data.setCalculationDetail(rawCalculation);
-
-        } catch (Exception e) {
-            System.err.println("Error parsing TEIL 2: " + e.getMessage());
-        }
-    }
-
-    private double parsePercentage(String val) {
-        if (val == null || val.isEmpty() || !val.contains("%"))
-            return 0.0;
-        try {
-            return Double.parseDouble(val.replace("%", "").trim());
-        } catch (Exception e) {
-            return 0.0;
-        }
-    }
-
-    private void parseTeil3(String content, FullAnalysisData data) {
-        try {
-            // Find TEIL 3 section
-            int teil3Start = content.indexOf("TEIL 3");
-            int teil4Start = content.indexOf("TEIL 4");
-
-            if (teil3Start == -1)
-                return;
-
-            String teil3Content = (teil4Start > teil3Start)
-                    ? content.substring(teil3Start, teil4Start)
-                    : content.substring(teil3Start);
-
-            TradingSetup setup = new TradingSetup();
-
-            // Parse Entry
-            Matcher entryMatcher = ENTRY_PATTERN.matcher(teil3Content);
-            if (entryMatcher.find()) {
-                setup.setEntry(entryMatcher.group(1) + " " + determineUnit(entryMatcher.group(0)));
-            }
-
-            // Parse Stop Loss
-            Matcher slMatcher = STOP_LOSS_PATTERN.matcher(teil3Content);
-            if (slMatcher.find()) {
-                setup.setStopLoss(slMatcher.group(1) + " " + determineUnit(slMatcher.group(0)));
-            }
-
-            // Parse Take Profit
-            Matcher tpMatcher = TAKE_PROFIT_PATTERN.matcher(teil3Content);
-            if (tpMatcher.find()) {
-                setup.setTakeProfit(tpMatcher.group(1) + " " + determineUnit(tpMatcher.group(0)));
-            }
-
-            // Parse Risk/Reward
-            Matcher rrMatcher = RISK_REWARD_PATTERN.matcher(teil3Content);
-            if (rrMatcher.find()) {
-                setup.setRiskReward(rrMatcher.group(1) + " : 1");
-            }
-
-            // Parse Risk
-            Matcher riskMatcher = RISK_PATTERN.matcher(teil3Content);
-            if (riskMatcher.find()) {
-                setup.setRisk(riskMatcher.group(1) + " " + determineUnit(riskMatcher.group(0)));
-            }
-
-            // Parse Reward
-            Matcher rewardMatcher = REWARD_PATTERN.matcher(teil3Content);
-            if (rewardMatcher.find()) {
-                setup.setReward(rewardMatcher.group(1) + " " + determineUnit(rewardMatcher.group(0)));
-            }
-
-            // Parse Rationale/Logic
-            // Priority 1: Detailed logic ("Kurz zur Logik", "Rationale")
-            Pattern detailedLogicPattern = Pattern.compile(
-                    "(?:Rationale|Kurz\\s*zur\\s*Logik|Logic).*?:\\s*(.+?)(?=\\n\\n|TEIL|$)",
-                    Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
-            Matcher detailedMatcher = detailedLogicPattern.matcher(teil3Content);
-
-            if (detailedMatcher.find()) {
-                setup.setRationale(detailedMatcher.group(1).trim());
-            } else {
-                // Priority 2: Short setup summary ("Setup-Ansatz")
-                Pattern setupPattern = Pattern.compile(
-                        "(?:Setup[‑-]Ansatz|Setup).*?:\\s*(.+?)(?=\\n\\n|TEIL|$)",
-                        Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
-                Matcher setupMatcher = setupPattern.matcher(teil3Content);
-                if (setupMatcher.find()) {
-                    setup.setRationale(setupMatcher.group(1).trim());
-                }
-            }
-
-            // Determine Direction
-            // 1. Try to find explicit mention
-            Pattern dirPattern = Pattern.compile("(?:Trade[‑-]Setup).*?((?:SELL|SHORT|BUY|LONG))",
-                    Pattern.CASE_INSENSITIVE);
-            Matcher dirMatcher = dirPattern.matcher(teil3Content);
-            if (dirMatcher.find()) {
-                String found = dirMatcher.group(1).toUpperCase();
-                if (found.equals("SELL") || found.equals("SHORT"))
-                    setup.setDirection("SHORT");
-                else if (found.equals("BUY") || found.equals("LONG"))
-                    setup.setDirection("LONG");
-            }
-
-            // 2. Fallback: Calculation based on prices
-            if (setup.getDirection().equals("N/A") && !setup.getEntry().equals("N/A")
-                    && !setup.getTakeProfit().equals("N/A")) {
-                try {
-                    double entryPrice = Double.parseDouble(setup.getEntry().replaceAll("[^\\d.]", ""));
-                    double tpPrice = Double.parseDouble(setup.getTakeProfit().replaceAll("[^\\d.]", ""));
-                    if (entryPrice > 0 && tpPrice > 0) {
-                        if (tpPrice < entryPrice)
-                            setup.setDirection("SHORT");
-                        else if (tpPrice > entryPrice)
-                            setup.setDirection("LONG");
-                    }
-                } catch (Exception e) {
-                    // ignore
-                }
-            }
-
-            data.setTradingSetup(setup);
-
-        } catch (Exception e) {
-            System.err.println("Error parsing TEIL 3: " + e.getMessage());
-        }
-    }
-
-    private void parseTeil4(String content, FullAnalysisData data) {
-        try {
-            // Find TEIL 4 section
-            int teil4Start = content.indexOf("TEIL 4");
-            if (teil4Start == -1)
-                return;
-
-            String teil4Content = content.substring(teil4Start);
-
-            // Extract sections with flexible matching
-            data.setCharttechnikDetail(extractSection(teil4Content,
-                    "(?:1\\.|Detail)\\s*Charttechnik", "(?:2\\.|Sentiment)"));
-
-            data.setSentimentDetail(extractSection(teil4Content,
-                    "(?:2\\.|Sentiment)", "(?:3\\.|Fundamental)"));
-
-            data.setFundamentalDetail(extractSection(teil4Content,
-                    "(?:3\\.|Fundamental)", "(?:4\\.|Zusatz|Risiko)"));
-
-            data.setRiskNotes(extractSection(teil4Content,
-                    "(?:Zusatzhinweise|Risiko)", "(?:Wenn du|$)"));
-
-        } catch (Exception e) {
-            System.err.println("Error parsing TEIL 4: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Extract a section of text between two markers.
-     */
-    private String extractSection(String content, String startMarker, String endMarker) {
-        try {
-            Pattern pattern = Pattern.compile(
-                    startMarker + ".*?:(.*?)(?=" + endMarker + ")",
-                    Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-
-            Matcher matcher = pattern.matcher(content);
-            if (matcher.find()) {
-                return matcher.group(1).trim();
-            }
-        } catch (Exception e) {
-            System.err.println("Error extracting section: " + e.getMessage());
-        }
-        return "";
-    }
-
-    /**
-     * Helper to determine unit from matching text.
-     */
-    private String determineUnit(String text) {
-        if (text == null)
-            return "USD";
-        String lower = text.toLowerCase();
-        if (lower.contains("punkte") || lower.contains("points"))
-            return "Punkte";
-        if (lower.contains("eur") || lower.contains("€"))
-            return "EUR";
-        return "USD";
-    }
-
 }

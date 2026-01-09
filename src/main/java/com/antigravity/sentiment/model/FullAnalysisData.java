@@ -1,64 +1,82 @@
 package com.antigravity.sentiment.model;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Represents the complete analysis data from a forecast file.
- * Designed to handle variations in AI-generated content with safe defaults.
+ * updated for new properties (FXSSI, Derivation, Rationales).
  */
 public class FullAnalysisData {
 
-    // TEIL 1: Statistical Data (already parsed by ReportParser)
+    // SECTION 0: Data Basis
     private String date;
+    private String fxssiLong; // e.g. "41%"
+    private String fxssiShort; // e.g. "59%"
+    private String highImpactEvents; // Text summary
+
+    // SECTION 1: Profile (Probabilities)
     private String upProbability;
     private String sidewaysProbability;
     private String downProbability;
-    private String spotPrice;
-    private String sources;
 
-    // TEIL 2: Numerical Derivation
-    private ComponentScore charttechnik;
-    private ComponentScore sentiment;
-    private ComponentScore makro;
-    private String totalBullProbability;
-    private String calculationDetail; // New field for text explanation
+    // SECTION 2 & 3: Derivation / Robot Control
+    private String instrument;
+    private String bias; // from result bias
+    private String csvSignal;
+    private String riskLevel;
+    private String derivationText; // Combined text for display
 
-    // TEIL 3: Trading Setup
-    private TradingSetup tradingSetup;
+    // Calculation explanation
+    private String probabilityCalculation;
 
-    // TEIL 4: Detailed Reasoning
-    private String charttechnikDetail;
-    private String sentimentDetail;
-    private String fundamentalDetail;
-    private String riskNotes;
+    // Analyst Consensus
+    private String analystConsensus;
 
-    // Full raw content for fallback display
+    // New Table Columns
+    private String vix;
+    private String rsi;
+    private String atr;
+    private String consensusNumbers;
+    private String panicStatus;
+
+    // SECTION 4: Rationales
+    // Map title -> content
+    private Map<String, String> rationales;
+
+    // Legacy / Fallback
     private String rawContent;
 
     public FullAnalysisData() {
-        // Safe defaults
         this.date = "";
+        this.fxssiLong = "50%";
+        this.fxssiShort = "50%";
+        this.highImpactEvents = "";
+
         this.upProbability = "0%";
         this.sidewaysProbability = "0%";
         this.downProbability = "0%";
-        this.spotPrice = "N/A";
-        this.sources = "";
 
-        this.charttechnik = new ComponentScore();
-        this.sentiment = new ComponentScore();
-        this.makro = new ComponentScore();
-        this.totalBullProbability = "0%";
-        this.calculationDetail = "";
+        this.instrument = "";
+        this.bias = "NEUTRAL";
+        this.csvSignal = "NEUTRAL";
+        this.riskLevel = "MEDIUM";
+        this.derivationText = "";
+        this.probabilityCalculation = "Keine Details verfügbar.";
+        this.analystConsensus = "Kein Analysten-Konsens gefunden.";
 
-        this.tradingSetup = new TradingSetup();
+        this.vix = "-";
+        this.rsi = "-";
+        this.atr = "-";
+        this.consensusNumbers = "-";
+        this.panicStatus = "Sicher"; // Default
 
-        this.charttechnikDetail = "";
-        this.sentimentDetail = "";
-        this.fundamentalDetail = "";
-        this.riskNotes = "";
-
+        this.rationales = new LinkedHashMap<>();
         this.rawContent = "";
     }
 
     // Getters and Setters
+
     public String getDate() {
         return date;
     }
@@ -67,276 +85,163 @@ public class FullAnalysisData {
         this.date = date;
     }
 
+    public String getFxssiLong() {
+        return fxssiLong;
+    }
+
+    public void setFxssiLong(String fxssiLong) {
+        this.fxssiLong = fxssiLong;
+    }
+
+    public String getFxssiShort() {
+        return fxssiShort;
+    }
+
+    public void setFxssiShort(String fxssiShort) {
+        this.fxssiShort = fxssiShort;
+    }
+
+    public String getHighImpactEvents() {
+        return highImpactEvents;
+    }
+
+    public void setHighImpactEvents(String event) {
+        this.highImpactEvents = event;
+    }
+
     public String getUpProbability() {
         return upProbability;
     }
 
-    public void setUpProbability(String upProbability) {
-        this.upProbability = upProbability;
+    public void setUpProbability(String p) {
+        this.upProbability = p;
     }
 
     public String getSidewaysProbability() {
         return sidewaysProbability;
     }
 
-    public void setSidewaysProbability(String sidewaysProbability) {
-        this.sidewaysProbability = sidewaysProbability;
+    public void setSidewaysProbability(String p) {
+        this.sidewaysProbability = p;
     }
 
     public String getDownProbability() {
         return downProbability;
     }
 
-    public void setDownProbability(String downProbability) {
-        this.downProbability = downProbability;
+    public void setDownProbability(String p) {
+        this.downProbability = p;
     }
 
-    public String getSpotPrice() {
-        return spotPrice;
+    public String getInstrument() {
+        return instrument;
     }
 
-    public void setSpotPrice(String spotPrice) {
-        this.spotPrice = spotPrice;
+    public void setInstrument(String i) {
+        this.instrument = i;
     }
 
-    public String getSources() {
-        return sources;
+    public String getBias() {
+        return bias;
     }
 
-    public void setSources(String sources) {
-        this.sources = sources;
+    public void setBias(String bias) {
+        this.bias = bias;
     }
 
-    public ComponentScore getCharttechnik() {
-        return charttechnik;
+    public String getCsvSignal() {
+        return csvSignal;
     }
 
-    public void setCharttechnik(ComponentScore charttechnik) {
-        this.charttechnik = charttechnik;
+    public void setCsvSignal(String s) {
+        this.csvSignal = s;
     }
 
-    public ComponentScore getSentiment() {
-        return sentiment;
+    public String getRiskLevel() {
+        return riskLevel;
     }
 
-    public void setSentiment(ComponentScore sentiment) {
-        this.sentiment = sentiment;
+    public void setRiskLevel(String r) {
+        this.riskLevel = r;
     }
 
-    public ComponentScore getMakro() {
-        return makro;
+    public String getDerivationText() {
+        return derivationText;
     }
 
-    public void setMakro(ComponentScore makro) {
-        this.makro = makro;
+    public void setDerivationText(String t) {
+        this.derivationText = t;
     }
 
-    public String getTotalBullProbability() {
-        return totalBullProbability;
+    public String getProbabilityCalculation() {
+        return probabilityCalculation;
     }
 
-    public void setTotalBullProbability(String totalBullProbability) {
-        this.totalBullProbability = totalBullProbability;
+    public void setProbabilityCalculation(String c) {
+        this.probabilityCalculation = c;
     }
 
-    public String getCalculationDetail() {
-        return calculationDetail;
+    public String getAnalystConsensus() {
+        return analystConsensus;
     }
 
-    public void setCalculationDetail(String calculationDetail) {
-        this.calculationDetail = calculationDetail;
+    public void setAnalystConsensus(String c) {
+        this.analystConsensus = c;
     }
 
-    public TradingSetup getTradingSetup() {
-        return tradingSetup;
+    public String getVix() {
+        return vix;
     }
 
-    public void setTradingSetup(TradingSetup tradingSetup) {
-        this.tradingSetup = tradingSetup;
+    public void setVix(String v) {
+        this.vix = v;
     }
 
-    public String getCharttechnikDetail() {
-        return charttechnikDetail;
+    public String getRsi() {
+        return rsi;
     }
 
-    public void setCharttechnikDetail(String charttechnikDetail) {
-        this.charttechnikDetail = charttechnikDetail;
+    public void setRsi(String r) {
+        this.rsi = r;
     }
 
-    public String getSentimentDetail() {
-        return sentimentDetail;
+    public String getAtr() {
+        return atr;
     }
 
-    public void setSentimentDetail(String sentimentDetail) {
-        this.sentimentDetail = sentimentDetail;
+    public void setAtr(String a) {
+        this.atr = a;
     }
 
-    public String getFundamentalDetail() {
-        return fundamentalDetail;
+    public String getConsensusNumbers() {
+        return consensusNumbers;
     }
 
-    public void setFundamentalDetail(String fundamentalDetail) {
-        this.fundamentalDetail = fundamentalDetail;
+    public void setConsensusNumbers(String c) {
+        this.consensusNumbers = c;
     }
 
-    public String getRiskNotes() {
-        return riskNotes;
+    public String getPanicStatus() {
+        return panicStatus;
     }
 
-    public void setRiskNotes(String riskNotes) {
-        this.riskNotes = riskNotes;
+    public void setPanicStatus(String p) {
+        this.panicStatus = p;
+    }
+
+    public Map<String, String> getRationales() {
+        return rationales;
+    }
+
+    public void setRationales(Map<String, String> r) {
+        this.rationales = r;
     }
 
     public String getRawContent() {
         return rawContent;
     }
 
-    public void setRawContent(String rawContent) {
-        this.rawContent = rawContent;
-    }
-
-    /**
-     * Inner class for component scores (TEIL 2)
-     */
-    public static class ComponentScore {
-        private String name;
-        private String weight;
-        private String score;
-        private String contribution;
-
-        public ComponentScore() {
-            this.name = "";
-            this.weight = "0%";
-            this.score = "0%";
-            this.contribution = "0%";
-        }
-
-        public ComponentScore(String name, String weight, String score, String contribution) {
-            this.name = name;
-            this.weight = weight;
-            this.score = score;
-            this.contribution = contribution;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getWeight() {
-            return weight;
-        }
-
-        public void setWeight(String weight) {
-            this.weight = weight;
-        }
-
-        public String getScore() {
-            return score;
-        }
-
-        public void setScore(String score) {
-            this.score = score;
-        }
-
-        public String getContribution() {
-            return contribution;
-        }
-
-        public void setContribution(String contribution) {
-            this.contribution = contribution;
-        }
-    }
-
-    /**
-     * Inner class for trading setup (TEIL 3)
-     */
-    public static class TradingSetup {
-        private String direction; // "LONG" or "SHORT"
-        private String entry;
-        private String stopLoss;
-        private String takeProfit;
-        private String riskReward;
-        private String risk;
-        private String reward;
-        private String rationale;
-
-        public TradingSetup() {
-            this.direction = "N/A";
-            this.entry = "N/A";
-            this.stopLoss = "N/A";
-            this.takeProfit = "N/A";
-            this.riskReward = "N/A";
-            this.risk = "N/A";
-            this.reward = "N/A";
-            this.rationale = "";
-        }
-
-        public String getDirection() {
-            return direction;
-        }
-
-        public void setDirection(String direction) {
-            this.direction = direction;
-        }
-
-        public String getEntry() {
-            return entry;
-        }
-
-        public void setEntry(String entry) {
-            this.entry = entry;
-        }
-
-        public String getStopLoss() {
-            return stopLoss;
-        }
-
-        public void setStopLoss(String stopLoss) {
-            this.stopLoss = stopLoss;
-        }
-
-        public String getTakeProfit() {
-            return takeProfit;
-        }
-
-        public void setTakeProfit(String takeProfit) {
-            this.takeProfit = takeProfit;
-        }
-
-        public String getRiskReward() {
-            return riskReward;
-        }
-
-        public void setRiskReward(String riskReward) {
-            this.riskReward = riskReward;
-        }
-
-        public String getRisk() {
-            return risk;
-        }
-
-        public void setRisk(String risk) {
-            this.risk = risk;
-        }
-
-        public String getReward() {
-            return reward;
-        }
-
-        public void setReward(String reward) {
-            this.reward = reward;
-        }
-
-        public String getRationale() {
-            return rationale;
-        }
-
-        public void setRationale(String rationale) {
-            this.rationale = rationale;
-        }
+    public void setRawContent(String r) {
+        this.rawContent = r;
     }
 }

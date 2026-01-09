@@ -35,12 +35,18 @@ public class ReportParser {
             "Datum:\\s*(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})");
 
     // Matches percentages for specific keywords
-    // Matches percentages for specific keywords (Case insensitive)
     // Strategy: Try PATTERN 1, if fail try PATTERN 2, etc. (Fallback logic)
 
     private static final List<Pattern> UP_PATTERNS = new ArrayList<>();
     private static final List<Pattern> SIDE_PATTERNS = new ArrayList<>();
     private static final List<Pattern> DOWN_PATTERNS = new ArrayList<>();
+
+    // NEW PATTERNS for "Trend-Start" and "Range" logic
+    private static final Pattern TREND_START_PATTERN = Pattern
+            .compile("(?i)Wahrscheinlichkeit Trend-Start.*?:\\s*(\\d+)%");
+    private static final Pattern RANGE_REV_PATTERN = Pattern
+            .compile("(?i)Wahrscheinlichkeit Range/Reversion.*?:\\s*(\\d+)%");
+    private static final Pattern RANGE_STAB_PATTERN = Pattern.compile("(?i)Erwartete Range Stabilitaet.*?:\\s*(\\d+)%");
 
     static {
         // UP Patterns
@@ -104,7 +110,7 @@ public class ReportParser {
 
     public List<DayForecast> parseContent(String content) {
         List<DayForecast> results = new ArrayList<>();
-        // Split by new line, but mostly processed line-by-line
+        // Split by new line
         String[] lines = content.split("\\R");
 
         DayForecast currentForecast = null;
@@ -114,82 +120,103 @@ public class ReportParser {
             if (line.isEmpty())
                 continue;
 
+            // --- DATE DETECTION ---
+
             // Check for explicit "Datum:" ISO format first
             Matcher isoMatcher = DATE_PATTERN_ISO.matcher(line);
             Matcher deMatcher = DATE_PATTERN_NUMERIC_DE.matcher(line);
+            String newDate = null;
 
             if (isoMatcher.find()) {
                 String year = isoMatcher.group(1);
                 String month = isoMatcher.group(2);
                 String day = isoMatcher.group(3);
-
-                if (currentForecast != null && currentForecast.hasData()) {
-                    results.add(currentForecast);
-                }
-
-                currentForecast = new DayForecast();
-                // Format: 4.1.26 (Removing leading zero from month for consistency)
                 int m = Integer.parseInt(month);
-                currentForecast.date = day + "." + m + "." + year.substring(2);
-            }
-            // Check for explicit "Datum:" German Numeric format "05.01.2026"
-            else if (deMatcher.find()) {
+                int d = Integer.parseInt(day);
+                newDate = d + "." + m + "." + year.substring(2);
+            } else if (deMatcher.find()) {
                 String day = deMatcher.group(1);
                 String month = deMatcher.group(2);
                 String year = deMatcher.group(3);
-
-                if (currentForecast != null && currentForecast.hasData()) {
-                    results.add(currentForecast);
-                }
-
-                currentForecast = new DayForecast();
                 int d = Integer.parseInt(day);
                 int m = Integer.parseInt(month);
                 String shortYear = year.length() == 4 ? year.substring(2) : year;
-                currentForecast.date = d + "." + m + "." + shortYear;
-            }
-            // Check textual format
-            else {
-                // Try to match Date
+                newDate = d + "." + m + "." + shortYear;
+            } else {
                 Matcher dateMatcher = DATE_PATTERN.matcher(line);
                 if (dateMatcher.find()) {
-                    String prefix = dateMatcher.group(1); // Montag, Datum, etc
-                    String day = dateMatcher.group(2); // 5
-                    String month = dateMatcher.group(3); // Januar
-                    String year = dateMatcher.group(4); // 2026
+                    String prefix = dateMatcher.group(1);
+                    String day = dateMatcher.group(2);
+                    String month = dateMatcher.group(3);
+                    String year = dateMatcher.group(4);
 
-                    // If "bis" is found, it's likely a range summary line -> Skip
-                    if (line.toLowerCase().contains(" bis "))
-                        continue;
-
-                    // Save previous forecast if exists
-                    if (currentForecast != null) {
-                        if (currentForecast.hasData())
-                            results.add(currentForecast);
+                    if (!line.toLowerCase().contains(" bis ")) {
+                        newDate = formatDate(prefix, day, month, year);
                     }
-
-                    currentForecast = new DayForecast();
-                    currentForecast.date = formatDate(prefix, day, month, year);
-
-                    // CRITICAL FIX: Do NOT continue here.
-                    // The probability data might be on the SAME line as the date.
                 }
             }
 
-            // Try to match Stats (always check, in case it's on the same line or subsequent
-            // lines)
+            // New Date Found -> Save previous and start new
+            if (newDate != null) {
+                if (currentForecast != null && currentForecast.hasData()) {
+                    results.add(currentForecast);
+                }
+                currentForecast = new DayForecast();
+                currentForecast.date = newDate;
+            }
+
+            // --- PROBABILITY DETECTION ---
+
             if (currentForecast != null) {
-                // Check Up
+                // 1. Try New Logic ("Trend-Start" / "Range")
+                Matcher rangeRevM = RANGE_REV_PATTERN.matcher(line);
+                if (rangeRevM.find()) {
+                    int val = Integer.parseInt(rangeRevM.group(1));
+                    currentForecast.sideways = val + "%";
+
+                    if (currentForecast.up.equals("0%") && currentForecast.down.equals("0%")) {
+                        int remainder = 100 - val;
+                        if (remainder > 0) {
+                            currentForecast.up = (remainder / 2) + "%";
+                            currentForecast.down = (remainder / 2) + "%";
+                        }
+                    }
+                }
+
+                Matcher rangeStabM = RANGE_STAB_PATTERN.matcher(line);
+                if (rangeStabM.find()) {
+                    int val = Integer.parseInt(rangeStabM.group(1));
+                    currentForecast.sideways = val + "%";
+                    // Auto-split remainder
+                    int remainder = 100 - val;
+                    if (remainder > 0) {
+                        currentForecast.up = (remainder / 2) + "%";
+                        currentForecast.down = (remainder / 2) + "%";
+                    }
+                }
+
+                Matcher trendStartM = TREND_START_PATTERN.matcher(line);
+                if (trendStartM.find()) {
+                    int val = Integer.parseInt(trendStartM.group(1));
+                    // Explicit logic: Trend Start is risk, usually implies directional move
+                    // We split it into Up/Down
+                    currentForecast.up = (val / 2) + "%";
+                    currentForecast.down = (val / 2) + "%";
+                }
+
+                // 2. Try Standard Logic (explicit keywords)
+                // Avoid overwriting if already set by specific logic above unless explicit
+                // match found?
+                // Standard patterns search for "steigt", "fällt".
+
                 String upVal = findFirstMatch(line, UP_PATTERNS);
                 if (upVal != null)
                     currentForecast.up = upVal + "%";
 
-                // Check Side
                 String sideVal = findFirstMatch(line, SIDE_PATTERNS);
                 if (sideVal != null)
                     currentForecast.sideways = sideVal + "%";
 
-                // Check Down
                 String downVal = findFirstMatch(line, DOWN_PATTERNS);
                 if (downVal != null)
                     currentForecast.down = downVal + "%";
@@ -215,7 +242,6 @@ public class ReportParser {
     }
 
     private String formatDate(String prefix, String day, String monthName, String year) {
-        // "Montag" -> "Mo", "Datum" -> ""
         String weekday = "";
         if (prefix != null && !prefix.equalsIgnoreCase("Datum") && !prefix.equalsIgnoreCase("Am")) {
             weekday = prefix.length() >= 2 ? prefix.substring(0, 2) + " " : "";
