@@ -25,6 +25,13 @@ public class HistoryData {
         if (dateStr == null || dateStr.isEmpty())
             return java.time.LocalDate.MIN;
         try {
+            // Try ISO format (yyyy-MM-dd) first as it is standard in new files
+            try {
+                return java.time.LocalDate.parse(dateStr);
+            } catch (Exception ignored) {
+                // Formatting specific for German short date d.M.yy
+            }
+
             // Remove weekday prefix if present (e.g. "Mo 5.1.26" -> "5.1.26")
             String cleanDate = dateStr;
             int firstDigit = -1;

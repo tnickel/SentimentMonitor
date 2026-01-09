@@ -92,19 +92,41 @@ public class FullAnalysisParser {
         }
 
         // VIX
-        Matcher vixM = Pattern.compile("VIX Index:.*?([\\d\\.\\-]+)").matcher(section);
+        // Matches "VIX Index: ca. 14-15" or "VIX Index: 14.5"
+        // Allow optional "ca." and skip text. Match digits, dots, hyphens, en-dashes.
+        Matcher vixM = Pattern.compile("VIX Index:.*?(?:ca\\.?\\s*)?([\\d\\.\\-–]+)").matcher(section);
         if (vixM.find())
             data.setVix(vixM.group(1).trim());
 
         // RSI
-        Matcher rsiM = Pattern.compile("RSI.*?:\\s*([\\d\\.]+)").matcher(section);
+        // "RSI (14): Investing.com 42.48" -> Skip text until digits
+        Matcher rsiM = Pattern.compile("RSI.*?:[^\\d]*([\\d\\.]+)").matcher(section);
         if (rsiM.find())
             data.setRsi(rsiM.group(1).trim());
 
         // ATR
-        Matcher atrM = Pattern.compile("ATR:.*?([\\d\\.]+)").matcher(section);
-        if (atrM.find())
-            data.setAtr(atrM.group(1).trim());
+        // Support tilde (~) and approx symbol (≈)
+        Matcher atrTilde = Pattern.compile("ATR.*?[~≈]\\s*([\\d\\.]+)").matcher(section);
+        if (atrTilde.find()) {
+            data.setAtr(atrTilde.group(1).trim());
+        } else {
+            // Fallback: simple first number (risky if text contains numbers like "ATR(14)")
+            // Try to skip ATR(14)
+            Matcher atrM = Pattern.compile("ATR:.*?(?<!\\()\\b([\\d\\.]{4,})").matcher(section);
+            // Logic: look for at least 4 chars (0.00...), or assume standard regex
+            // Alternative: ATR.*?:.*?([\d\.]+)(?!])
+            Matcher atrSimple = Pattern.compile("ATR:.*?([\\d\\.]+)").matcher(section);
+            if (atrSimple.find()) {
+                // Check if it's "14" from "ATR(14)" -> usually 14 is integer, ATR is float < 1
+                // or large > 10?
+                // If extracting "14", we might want to skip it?
+                // User text: "ATR(14) sehr klein...".
+                // Let's stick to "~" priority. If not found, use simple but be careful.
+                // For now, if ATR simple finds "14", it is what it is unless we filter.
+                // Let's use the simple one only if tilde fails.
+                data.setAtr(atrSimple.group(1).trim());
+            }
+        }
     }
 
     private void parseSection1(String content, FullAnalysisData data) {

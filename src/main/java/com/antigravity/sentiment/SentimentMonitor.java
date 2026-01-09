@@ -13,7 +13,6 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
-import javafx.scene.shape.Circle;
 import javafx.scene.paint.Color;
 
 import java.io.File;
@@ -141,92 +140,73 @@ public class SentimentMonitor extends Application {
         colAsset.setCellValueFactory(new PropertyValueFactory<>("asset"));
         colAsset.setPrefWidth(100);
 
-        // --- Ampel Logic Start ---
-        TableColumn<ForecastData, Void> colAmpel = new TableColumn<>("Ampel");
-        colAmpel.setPrefWidth(60);
-        colAmpel.setCellFactory(param -> new TableCell<>() {
-            private final Circle circle = new Circle(8);
-
+        // --- Signal (Graphic) Start ---
+        TableColumn<ForecastData, String> colSignal = new TableColumn<>("Signal");
+        colSignal.setCellValueFactory(new PropertyValueFactory<>("signal"));
+        colSignal.setPrefWidth(80);
+        colSignal.setCellFactory(param -> new TableCell<>() {
             @Override
-            protected void updateItem(Void item, boolean empty) {
+            protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
+                if (empty || item == null) {
                     setGraphic(null);
+                    setText(null);
                 } else {
-                    ForecastData data = getTableRow().getItem();
-                    // We check Day 1 forecasts
-                    String upStr = data.up1Property().get().replace("%", "").trim();
-                    String downStr = data.down1Property().get().replace("%", "").trim();
+                    javafx.scene.text.Text icon = new javafx.scene.text.Text();
+                    icon.setFont(javafx.scene.text.Font.font("System", javafx.scene.text.FontWeight.BOLD, 18));
 
-                    int upVal = 0;
-                    int downVal = 0;
-                    try {
-                        upVal = Integer.parseInt(upStr);
-                    } catch (NumberFormatException ignored) {
+                    switch (item) {
+                        case "STEIGT":
+                            icon.setText("▲"); // Up Arrow
+                            icon.setFill(Color.GREEN);
+                            break;
+                        case "FAELLT":
+                            icon.setText("▼"); // Down Arrow
+                            icon.setFill(Color.RED);
+                            break;
+                        case "SEITWAERTS":
+                            icon.setText("▶"); // Right Arrow
+                            icon.setFill(Color.GRAY);
+                            break;
+                        case "PANIC":
+                            icon.setText("STOP"); // Clear text for Panic
+                            icon.setFill(Color.RED);
+                            icon.setFont(javafx.scene.text.Font.font("System", javafx.scene.text.FontWeight.BOLD, 14));
+                            break;
+                        default:
+                            icon.setText("-");
+                            icon.setFill(Color.LIGHTGRAY);
                     }
-                    try {
-                        downVal = Integer.parseInt(downStr);
-                    } catch (NumberFormatException ignored) {
-                    }
-
-                    int thresholdUp = configManager.getThresholdUp();
-                    int thresholdDown = configManager.getThresholdDown();
-
-                    if (upVal > thresholdUp) {
-                        circle.setFill(Color.GREEN);
-                        setGraphic(circle);
-                    } else if (downVal > thresholdDown) {
-                        circle.setFill(Color.BLUE);
-                        setGraphic(circle);
-                    } else {
-                        setGraphic(null);
-                    }
+                    setGraphic(icon);
+                    setText("");
+                    setAlignment(javafx.geometry.Pos.CENTER);
                 }
             }
         });
-        // --- Ampel Logic End ---
+        // --- Signal End ---
 
-        // Day 1
-        TableColumn<ForecastData, String> colDay1 = new TableColumn<>("Tag 1");
-        TableColumn<ForecastData, String> colDate1 = new TableColumn<>("Datum");
-        colDate1.setCellValueFactory(new PropertyValueFactory<>("date1"));
-        TableColumn<ForecastData, String> colUp1 = new TableColumn<>("Steigt %");
-        colUp1.setCellValueFactory(new PropertyValueFactory<>("up1"));
-        TableColumn<ForecastData, String> colSide1 = new TableColumn<>("Seitw. %");
-        colSide1.setCellValueFactory(new PropertyValueFactory<>("sideways1"));
-        TableColumn<ForecastData, String> colDown1 = new TableColumn<>("Fällt %");
-        colDown1.setCellValueFactory(new PropertyValueFactory<>("down1"));
+        TableColumn<ForecastData, String> colDate = new TableColumn<>("Datum");
+        colDate.setCellValueFactory(new PropertyValueFactory<>("date"));
+        colDate.setPrefWidth(100);
 
-        colDay1.getColumns().addAll(colDate1, colUp1, colSide1, colDown1);
+        TableColumn<ForecastData, String> colSentiment = new TableColumn<>("Sentiment (L/S)");
+        colSentiment.setCellValueFactory(new PropertyValueFactory<>("sentiment"));
+        colSentiment.setPrefWidth(120);
 
-        // Day 2
-        TableColumn<ForecastData, String> colDay2 = new TableColumn<>("Tag 2");
-        TableColumn<ForecastData, String> colDate2 = new TableColumn<>("Datum");
-        colDate2.setCellValueFactory(new PropertyValueFactory<>("date2"));
-        TableColumn<ForecastData, String> colUp2 = new TableColumn<>("Steigt %");
-        colUp2.setCellValueFactory(new PropertyValueFactory<>("up2"));
-        TableColumn<ForecastData, String> colSide2 = new TableColumn<>("Seitw. %");
-        colSide2.setCellValueFactory(new PropertyValueFactory<>("sideways2"));
-        TableColumn<ForecastData, String> colDown2 = new TableColumn<>("Fällt %");
-        colDown2.setCellValueFactory(new PropertyValueFactory<>("down2"));
+        TableColumn<ForecastData, String> colVix = new TableColumn<>("VIX");
+        colVix.setCellValueFactory(new PropertyValueFactory<>("vix"));
+        colVix.setPrefWidth(60);
 
-        colDay2.getColumns().addAll(colDate2, colUp2, colSide2, colDown2);
+        TableColumn<ForecastData, String> colConsensus = new TableColumn<>("Analysten-Konsens");
+        colConsensus.setCellValueFactory(new PropertyValueFactory<>("consensus"));
+        colConsensus.setPrefWidth(120);
 
-        // 6 Monate
-        TableColumn<ForecastData, String> col6m = new TableColumn<>("6 Monate");
-        TableColumn<ForecastData, String> colDate6m = new TableColumn<>("Datum");
-        colDate6m.setCellValueFactory(new PropertyValueFactory<>("date6m"));
-        TableColumn<ForecastData, String> colUp6m = new TableColumn<>("Steigt %");
-        colUp6m.setCellValueFactory(new PropertyValueFactory<>("up6m"));
-        TableColumn<ForecastData, String> colSide6m = new TableColumn<>("Seitw. %");
-        colSide6m.setCellValueFactory(new PropertyValueFactory<>("sideways6m"));
-        TableColumn<ForecastData, String> colDown6m = new TableColumn<>("Fällt %");
-        colDown6m.setCellValueFactory(new PropertyValueFactory<>("down6m"));
+        TableColumn<ForecastData, String> colIndicators = new TableColumn<>("Indikatoren");
+        colIndicators.setCellValueFactory(new PropertyValueFactory<>("indicators"));
+        colIndicators.setPrefWidth(180);
 
-        col6m.getColumns().addAll(colDate6m, colUp6m, colSide6m, colDown6m);
-
-        // Add columns (including new Ampel)
-        table.getColumns().addAll(colAsset, colAmpel, colDay1, colDay2, col6m);
+        // Add columns
+        table.getColumns().addAll(colAsset, colSignal, colDate, colSentiment, colVix, colConsensus, colIndicators);
 
         // Double-click interaction
         table.setRowFactory(tv -> {

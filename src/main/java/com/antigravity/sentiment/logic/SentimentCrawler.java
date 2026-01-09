@@ -14,7 +14,6 @@ import java.util.List;
 public class SentimentCrawler {
 
     private final FullAnalysisParser parser = new FullAnalysisParser();
-    private final ReportParser historyParser = new ReportParser(); // Keep for history parsing if needed
 
     public List<ForecastData> crawl(String rootPath) {
         List<ForecastData> dataList = new ArrayList<>();
@@ -61,38 +60,53 @@ public class SentimentCrawler {
 
             // Determine Signal
             String signal = "NEUTRAL";
-            if (analysis.getPanicStatus() != null && analysis.getPanicStatus().toUpperCase().contains("PANIC")) {
-                signal = "PANIC";
-            } else {
-                // Logic based on probabilities or CSV Signal
-                // Priorities: CSV Signal > Probabilities?
-                // Using CSV Signal:
-                /*
-                 * String csv = analysis.getCsvSignal().toUpperCase();
-                 * if (csv.contains("LONG") || csv.contains("BUY")) signal = "STEIGT";
-                 * else if (csv.contains("SHORT") || csv.contains("SELL")) signal = "FAELLT";
-                 * else signal = "SEITWAERTS";
-                 */
 
-                // Better approach: Logic based on probability fields (which we extracted)
-                // However, user said "CsvSignal" is reliable? "CSV_SIGNAL: NEUTRAL".
-                // Let's use Probabilities for direction if CSV is Neutral? Or use CSV Signal?
-                // User asked for "steigt, seitwärts, fällt".
+            // 1. Check Panic
+            String panicStatus = analysis.getPanicStatus();
+            if (panicStatus != null) {
+                String p = panicStatus.toUpperCase();
+                // Ignore "Kein Panic", "Sicher", "Safe"
+                boolean isSafe = p.contains("KEIN PANIC") || p.contains("NO PANIC") || p.contains("SICHER")
+                        || p.contains("SAFE");
+                if (p.contains("PANIC") && !isSafe) {
+                    signal = "PANIC";
+                }
+            }
 
-                int up = parsePercentage(analysis.getUpProbability());
-                int down = parsePercentage(analysis.getDownProbability());
-                int side = parsePercentage(analysis.getSidewaysProbability());
+            // 2. If not Panic, use CSV Signal or Probabilities
+            if (!"PANIC".equals(signal)) {
+                String csvSignal = analysis.getCsvSignal();
+                boolean signalFound = false;
 
-                if (up > side && up > down)
-                    signal = "STEIGT";
-                else if (down > side && down > up)
-                    signal = "FAELLT";
-                else
-                    signal = "SEITWAERTS";
+                if (csvSignal != null) {
+                    csvSignal = csvSignal.toUpperCase();
+                    if (csvSignal.contains("BUY") || csvSignal.contains("LONG")) {
+                        signal = "STEIGT";
+                        signalFound = true;
+                    } else if (csvSignal.contains("SELL") || csvSignal.contains("SHORT")) {
+                        signal = "FAELLT";
+                        signalFound = true;
+                    } else if (csvSignal.contains("NEUTRAL")) {
+                        signal = "SEITWAERTS";
+                        // Allow probabilities to override Neutral if they are very strong?
+                        // For now, trust the robot's "Neutral" verdict.
+                        signalFound = true;
+                    }
+                }
 
-                // Fallback / Override from CSV if needed
-                // If CSV_SIGNAL says LONG but probability slightly side?
-                // Let's stick to probability dominance for "Trend".
+                // Fallback to probabilities if no clear CSV signal found
+                if (!signalFound) {
+                    int up = parsePercentage(analysis.getUpProbability());
+                    int down = parsePercentage(analysis.getDownProbability());
+                    int side = parsePercentage(analysis.getSidewaysProbability());
+
+                    if (up > side && up > down)
+                        signal = "STEIGT";
+                    else if (down > side && down > up)
+                        signal = "FAELLT";
+                    else
+                        signal = "SEITWAERTS";
+                }
             }
 
             String sentiment = analysis.getFxssiLong() + " L / " + analysis.getFxssiShort() + " S";
