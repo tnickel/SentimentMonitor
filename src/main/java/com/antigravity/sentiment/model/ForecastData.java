@@ -20,10 +20,12 @@ public class ForecastData {
     private final StringProperty sideProb;
     private final StringProperty downProb;
 
+    private final StringProperty explanation;
+
     public ForecastData(String asset, String assetPath, String date,
             String signal, String sentiment, String vix,
             String consensus, String indicators,
-            String upProb, String sideProb, String downProb) {
+            String upProb, String sideProb, String downProb, String explanation) {
         this.asset = new SimpleStringProperty(asset);
         this.assetPath = assetPath;
         this.date = new SimpleStringProperty(date);
@@ -35,6 +37,7 @@ public class ForecastData {
         this.upProb = new SimpleStringProperty(upProb);
         this.sideProb = new SimpleStringProperty(sideProb);
         this.downProb = new SimpleStringProperty(downProb);
+        this.explanation = new SimpleStringProperty(explanation);
     }
 
     // Getters for properties
@@ -84,5 +87,17 @@ public class ForecastData {
 
     public String getAsset() {
         return asset.get();
+    }
+
+    public String getSignal() {
+        return signal.get();
+    }
+
+    public StringProperty explanationProperty() {
+        return explanation;
+    }
+
+    public String getExplanation() {
+        return explanation.get();
     }
 }

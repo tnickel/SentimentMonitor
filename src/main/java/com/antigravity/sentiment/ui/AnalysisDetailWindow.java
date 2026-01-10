@@ -76,6 +76,9 @@ public class AnalysisDetailWindow {
         BarChart<String, Number> barChart = new BarChart<>(xAxis, yAxis);
         barChart.setTitle("Prognose für " + analysisData.getDate());
         barChart.setLegendVisible(false);
+        barChart.setPrefHeight(250); // Hard limit to approx 1/3 of screen
+        barChart.setMaxHeight(250);
+        barChart.setMinHeight(200);
 
         XYChart.Series<String, Number> series = new XYChart.Series<>();
 
@@ -102,6 +105,7 @@ public class AnalysisDetailWindow {
         consArea.setStyle("-fx-control-inner-background: #f4f4f4; -fx-font-family: Monospaced;");
 
         vbox.getChildren().addAll(consTitle, consArea);
+        VBox.setVgrow(consArea, Priority.ALWAYS); // Grow vertically
 
         // Calculation Details
         Label calcTitle = new Label("Berechnungsdetails:");
@@ -109,15 +113,16 @@ public class AnalysisDetailWindow {
         TextArea calcArea = new TextArea(analysisData.getProbabilityCalculation());
         calcArea.setEditable(false);
         calcArea.setWrapText(true);
-        calcArea.setPrefRowCount(4);
+        // calcArea.setPrefRowCount(4); // Removed fixed preference
         calcArea.setStyle("-fx-control-inner-background: #f4f4f4; -fx-font-family: Monospaced;");
 
         vbox.getChildren().addAll(calcTitle, calcArea);
+        VBox.setVgrow(calcArea, Priority.ALWAYS); // Grow vertically
 
         return vbox;
     }
 
-    private ScrollPane createDerivationTab() {
+    private VBox createDerivationTab() {
         VBox vbox = new VBox(20);
         vbox.setPadding(new Insets(20));
         vbox.setAlignment(Pos.TOP_CENTER);
@@ -160,14 +165,13 @@ public class AnalysisDetailWindow {
         TextArea textArea = new TextArea(analysisData.getDerivationText());
         textArea.setWrapText(true);
         textArea.setEditable(false);
-        textArea.setPrefHeight(400);
+        // textArea.setPrefHeight(400); // Dynamic height now
         textArea.setFont(Font.font("Monospaced", 13));
 
         vbox.getChildren().add(textArea);
+        VBox.setVgrow(textArea, Priority.ALWAYS); // Fill remaining space
 
-        ScrollPane scroll = new ScrollPane(vbox);
-        scroll.setFitToWidth(true);
-        return scroll;
+        return vbox;
     }
 
     private ScrollPane createReasoningTab() {

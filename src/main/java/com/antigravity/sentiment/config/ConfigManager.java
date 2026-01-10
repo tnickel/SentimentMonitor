@@ -12,6 +12,7 @@ public class ConfigManager {
     private static final String KEY_ROOT_PATH = "root.path";
     private static final String KEY_THRESHOLD_UP = "threshold.up";
     private static final String KEY_THRESHOLD_DOWN = "threshold.down";
+    private static final String KEY_CSV_EXPORT_PATH = "csv.export.path";
 
     private Properties properties;
     private File configFile;
@@ -72,6 +73,15 @@ public class ConfigManager {
 
     public void setThresholdDown(int value) {
         properties.setProperty(KEY_THRESHOLD_DOWN, String.valueOf(value));
+        saveConfig();
+    }
+
+    public String getCsvExportPath() {
+        return properties.getProperty(KEY_CSV_EXPORT_PATH, System.getProperty("user.home"));
+    }
+
+    public void setCsvExportPath(String path) {
+        properties.setProperty(KEY_CSV_EXPORT_PATH, path);
         saveConfig();
     }
 }

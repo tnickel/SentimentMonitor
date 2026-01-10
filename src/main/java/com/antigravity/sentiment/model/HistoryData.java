@@ -8,15 +8,17 @@ public class HistoryData {
     private final StringProperty up;
     private final StringProperty sideways;
     private final StringProperty down;
+    private final StringProperty signal; // New field
     private final String sourceFilePath; // Path to the source file for detailed analysis
 
     private final java.time.LocalDate sortableDate;
 
-    public HistoryData(String date, String up, String sideways, String down, String sourceFilePath) {
+    public HistoryData(String date, String up, String sideways, String down, String signal, String sourceFilePath) {
         this.date = new SimpleStringProperty(date);
         this.up = new SimpleStringProperty(up);
         this.sideways = new SimpleStringProperty(sideways);
         this.down = new SimpleStringProperty(down);
+        this.signal = new SimpleStringProperty(signal);
         this.sourceFilePath = sourceFilePath;
         this.sortableDate = parseDate(date);
     }
@@ -71,6 +73,10 @@ public class HistoryData {
 
     public StringProperty downProperty() {
         return down;
+    }
+
+    public StringProperty signalProperty() {
+        return signal;
     }
 
     public String getSourceFilePath() {

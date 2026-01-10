@@ -10,6 +10,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class SentimentCrawler {
 
@@ -59,58 +62,46 @@ public class SentimentCrawler {
             FullAnalysisData analysis = parser.parseFullAnalysis(content);
 
             // Determine Signal
-            String signal = "NEUTRAL";
-
-            // 1. Check Panic
-            String panicStatus = analysis.getPanicStatus();
-            if (panicStatus != null) {
-                String p = panicStatus.toUpperCase();
-                // Ignore "Kein Panic", "Sicher", "Safe"
-                boolean isSafe = p.contains("KEIN PANIC") || p.contains("NO PANIC") || p.contains("SICHER")
-                        || p.contains("SAFE");
-                if (p.contains("PANIC") && !isSafe) {
-                    signal = "PANIC";
-                }
-            }
-
-            // 2. If not Panic, use CSV Signal or Probabilities
-            if (!"PANIC".equals(signal)) {
-                String csvSignal = analysis.getCsvSignal();
-                boolean signalFound = false;
-
-                if (csvSignal != null) {
-                    csvSignal = csvSignal.toUpperCase();
-                    if (csvSignal.contains("BUY") || csvSignal.contains("LONG")) {
-                        signal = "STEIGT";
-                        signalFound = true;
-                    } else if (csvSignal.contains("SELL") || csvSignal.contains("SHORT")) {
-                        signal = "FAELLT";
-                        signalFound = true;
-                    } else if (csvSignal.contains("NEUTRAL")) {
-                        signal = "SEITWAERTS";
-                        // Allow probabilities to override Neutral if they are very strong?
-                        // For now, trust the robot's "Neutral" verdict.
-                        signalFound = true;
-                    }
-                }
-
-                // Fallback to probabilities if no clear CSV signal found
-                if (!signalFound) {
-                    int up = parsePercentage(analysis.getUpProbability());
-                    int down = parsePercentage(analysis.getDownProbability());
-                    int side = parsePercentage(analysis.getSidewaysProbability());
-
-                    if (up > side && up > down)
-                        signal = "STEIGT";
-                    else if (down > side && down > up)
-                        signal = "FAELLT";
-                    else
-                        signal = "SEITWAERTS";
-                }
-            }
+            String signal = determineSignal(analysis);
 
             String sentiment = analysis.getFxssiLong() + " L / " + analysis.getFxssiShort() + " S";
             String indicators = "RSI=" + analysis.getRsi() + ", ATR=" + analysis.getAtr();
+
+            // Extract explanation (first 3 sentences from reason "1)")
+            String explanation = "Keine Begründung verfügbar";
+            Map<String, String> rationales = analysis.getRationales();
+            if (rationales != null) {
+                for (Map.Entry<String, String> entry : rationales.entrySet()) {
+                    if (entry.getKey().toLowerCase().contains("begründung")
+                            && entry.getKey().toLowerCase().contains("csv_signal")) {
+                        String text = entry.getValue();
+                        // Split by sentence delimiters
+                        String[] sentences = text.split("(?<=[.!?])\\s+");
+                        StringBuilder sb = new StringBuilder();
+                        int count = 0;
+                        for (String sentence : sentences) {
+                            if (count >= 3)
+                                break;
+                            sb.append(sentence).append(" ");
+                            count++;
+                        }
+                        explanation = sb.toString().trim();
+                        break;
+                    }
+                }
+            }
+            // Fallback: use Derivation text summary if no specific section found
+            if ("Keine Begründung verfügbar".equals(explanation) && analysis.getDerivationText() != null) {
+                // Try to pick bias
+                String derivation = analysis.getDerivationText();
+                if (derivation.contains("Finaler Bias:")) {
+                    int start = derivation.indexOf("Finaler Bias:");
+                    int end = derivation.indexOf("\n", start);
+                    if (end == -1)
+                        end = derivation.length();
+                    explanation = derivation.substring(start, end).trim();
+                }
+            }
 
             ForecastData fd = new ForecastData(
                     assetName,
@@ -123,7 +114,8 @@ public class SentimentCrawler {
                     indicators,
                     analysis.getUpProbability(),
                     analysis.getSidewaysProbability(),
-                    analysis.getDownProbability());
+                    analysis.getDownProbability(),
+                    explanation);
 
             results.add(fd);
 
@@ -148,22 +140,70 @@ public class SentimentCrawler {
         for (File file : textFiles) {
             try {
                 String content = Files.readString(file.toPath());
-                // For history we can use simple ReportParser or FullAnalysisParser.
-                // Using ReportParser for speed/simplicity as it extracts probabilities directly
-                // But ReportParser might fail on new format?
-                // Let's us FullAnalysisParser for consistency!
                 FullAnalysisData fad = parser.parseFullAnalysis(content);
+                String sig = determineSignal(fad);
+
                 history.add(new HistoryData(
                         fad.getDate(),
                         fad.getUpProbability(),
                         fad.getSidewaysProbability(),
                         fad.getDownProbability(),
+                        sig,
                         file.getAbsolutePath()));
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
         return history;
+    }
+
+    private String determineSignal(FullAnalysisData analysis) {
+        String signal = "NEUTRAL";
+
+        // 1. Check Panic
+        String panicStatus = analysis.getPanicStatus();
+        if (panicStatus != null) {
+            String p = panicStatus.toUpperCase();
+            // Ignore "Kein Panic", "Sicher", "Safe"
+            boolean isSafe = p.contains("KEIN PANIC") || p.contains("NO PANIC") || p.contains("SICHER")
+                    || p.contains("SAFE");
+            if (p.contains("PANIC") && !isSafe) {
+                return "PANIC";
+            }
+        }
+
+        // 2. If not Panic, use CSV Signal or Probabilities
+        String csvSignal = analysis.getCsvSignal();
+        boolean signalFound = false;
+
+        if (csvSignal != null) {
+            csvSignal = csvSignal.toUpperCase();
+            if (csvSignal.contains("BUY") || csvSignal.contains("LONG")) {
+                signal = "STEIGT";
+                signalFound = true;
+            } else if (csvSignal.contains("SELL") || csvSignal.contains("SHORT")) {
+                signal = "FAELLT";
+                signalFound = true;
+            } else if (csvSignal.contains("NEUTRAL")) {
+                signal = "SEITWAERTS";
+                signalFound = true;
+            }
+        }
+
+        // Fallback to probabilities if no clear CSV signal found
+        if (!signalFound) {
+            int up = parsePercentage(analysis.getUpProbability());
+            int down = parsePercentage(analysis.getDownProbability());
+            int side = parsePercentage(analysis.getSidewaysProbability());
+
+            if (up > side && up > down)
+                signal = "STEIGT";
+            else if (down > side && down > up)
+                signal = "FAELLT";
+            else
+                signal = "SEITWAERTS";
+        }
+        return signal;
     }
 
     private int parsePercentage(String s) {

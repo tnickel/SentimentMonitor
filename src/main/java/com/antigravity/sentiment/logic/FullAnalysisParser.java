@@ -88,43 +88,48 @@ public class FullAnalysisParser {
             Matcher numM = numPat.matcher(cm.group(1));
             if (numM.find()) {
                 data.setConsensusNumbers(numM.group(1));
+            } else {
+                // Try "1 of 4"
+                Pattern numPatEng = Pattern.compile("Konsens:.*?(\\d+\\s+of\\s+\\d+)");
+                Matcher numMEng = numPatEng.matcher(cm.group(1));
+                if (numMEng.find()) {
+                    data.setConsensusNumbers(numMEng.group(1));
+                }
             }
         }
 
         // VIX
         // Matches "VIX Index: ca. 14-15" or "VIX Index: 14.5"
         // Allow optional "ca." and skip text. Match digits, dots, hyphens, en-dashes.
-        Matcher vixM = Pattern.compile("VIX Index:.*?(?:ca\\.?\\s*)?([\\d\\.\\-–]+)").matcher(section);
+        // VIX
+        // Matches "VIX Index: ca. 14-15" or "VIX Index: 14.5"
+        Matcher vixM = Pattern.compile("VIX Index:.*?(?:ca\\.?\\s*|≈\\s*)?([\\d\\.\\-–]+)").matcher(section);
         if (vixM.find())
             data.setVix(vixM.group(1).trim());
 
         // RSI
         // "RSI (14): Investing.com 42.48" -> Skip text until digits
-        Matcher rsiM = Pattern.compile("RSI.*?:[^\\d]*([\\d\\.]+)").matcher(section);
+        // Avoid capturing "14" from "RSI (14)"
+        // Pattern: RSI, optional (14), optional colon, optional non-digits, then
+        // capture digits
+        Matcher rsiM = Pattern.compile("RSI\\s*(?:\\(\\d+\\))?.*?:[^\\d]*([\\d\\.]+)").matcher(section);
         if (rsiM.find())
             data.setRsi(rsiM.group(1).trim());
 
         // ATR
         // Support tilde (~) and approx symbol (≈)
-        Matcher atrTilde = Pattern.compile("ATR.*?[~≈]\\s*([\\d\\.]+)").matcher(section);
-        if (atrTilde.find()) {
-            data.setAtr(atrTilde.group(1).trim());
+        Matcher atrVal = Pattern.compile("ATR.*?[:≈~]\\s*([\\d\\.]+)").matcher(section);
+        if (atrVal.find()) {
+            data.setAtr(atrVal.group(1).trim());
         } else {
-            // Fallback: simple first number (risky if text contains numbers like "ATR(14)")
-            // Try to skip ATR(14)
-            Matcher atrM = Pattern.compile("ATR:.*?(?<!\\()\\b([\\d\\.]{4,})").matcher(section);
-            // Logic: look for at least 4 chars (0.00...), or assume standard regex
-            // Alternative: ATR.*?:.*?([\d\.]+)(?!])
-            Matcher atrSimple = Pattern.compile("ATR:.*?([\\d\\.]+)").matcher(section);
-            if (atrSimple.find()) {
-                // Check if it's "14" from "ATR(14)" -> usually 14 is integer, ATR is float < 1
-                // or large > 10?
-                // If extracting "14", we might want to skip it?
-                // User text: "ATR(14) sehr klein...".
-                // Let's stick to "~" priority. If not found, use simple but be careful.
-                // For now, if ATR simple finds "14", it is what it is unless we filter.
-                // Let's use the simple one only if tilde fails.
-                data.setAtr(atrSimple.group(1).trim());
+            // Fallback for textual references "niedrig", "low"
+            Matcher atrText = Pattern.compile("ATR.*?:.*?\"?([A-Za-z\\s]+)\"?").matcher(section);
+            if (atrText.find()) {
+                String txt = atrText.group(1).trim();
+                // Avoid capturing long sentences
+                if (txt.length() > 2 && txt.length() < 25) {
+                    data.setAtr(txt);
+                }
             }
         }
     }
@@ -141,6 +146,22 @@ public class FullAnalysisParser {
         Matcher dm = DATE_PATTERN_ISO.matcher(content); // Check full content for date to be safe
         if (dm.find()) {
             data.setDate(dm.group(1));
+        } else {
+            // Fallback for English textual format: January 9, 2026
+            Pattern dateText = Pattern.compile("Datum:\\s*([A-Za-z]+\\s+\\d{1,2},\\s+\\d{4})");
+            Matcher dmText = dateText.matcher(content);
+            if (dmText.find()) {
+                String rawDate = dmText.group(1);
+                try {
+                    // Parse "January 9, 2026" to "2026-01-09"
+                    java.time.format.DateTimeFormatter inputFmt = java.time.format.DateTimeFormatter
+                            .ofPattern("MMMM d, yyyy", java.util.Locale.ENGLISH);
+                    java.time.LocalDate ld = java.time.LocalDate.parse(rawDate, inputFmt);
+                    data.setDate(ld.toString()); // ISO result
+                } catch (Exception e) {
+                    data.setDate(rawDate); // Fallback to raw string
+                }
+            }
         }
 
         // Probabilities
