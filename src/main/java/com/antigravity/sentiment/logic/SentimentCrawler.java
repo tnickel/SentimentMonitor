@@ -69,14 +69,26 @@ public class SentimentCrawler {
             String lastSignal = "";
             if (textFiles.length > 1) {
                 try {
-                    // textFiles[0] is newest, textFiles[1] is one before
-                    File lastFile = textFiles[1];
-                    String lastContent = Files.readString(lastFile.toPath());
-                    FullAnalysisData lastAnalysis = parser.parseFullAnalysis(lastContent);
-                    String lastSig = determineSignal(lastAnalysis);
-                    lastSignal = lastSig;
+                    java.time.LocalDate currentDate = HistoryData.parseDate(analysis.getDate());
+
+                    for (int i = 1; i < textFiles.length; i++) {
+                        File lastFile = textFiles[i];
+                        String lastContent = Files.readString(lastFile.toPath());
+                        FullAnalysisData lastAnalysis = parser.parseFullAnalysis(lastContent);
+                        java.time.LocalDate lastDate = HistoryData.parseDate(lastAnalysis.getDate());
+
+                        // Condition: Must be at least 1 day older (strictly before current date)
+                        // Also checks if dates are valid (not MIN)
+                        if (lastDate != java.time.LocalDate.MIN && currentDate != java.time.LocalDate.MIN
+                                && lastDate.isBefore(currentDate)) {
+                            String lastSig = determineSignal(lastAnalysis);
+                            lastSignal = lastSig;
+                            break;
+                        }
+                    }
                 } catch (Exception e) {
-                    lastSignal = "Error";
+                    // Keep empty or error
+                    System.err.println("Error determining last signal: " + e.getMessage());
                 }
             }
 

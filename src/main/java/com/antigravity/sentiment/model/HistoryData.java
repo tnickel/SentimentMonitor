@@ -23,7 +23,7 @@ public class HistoryData {
         this.sortableDate = parseDate(date);
     }
 
-    private java.time.LocalDate parseDate(String dateStr) {
+    public static java.time.LocalDate parseDate(String dateStr) {
         if (dateStr == null || dateStr.isEmpty())
             return java.time.LocalDate.MIN;
         try {
