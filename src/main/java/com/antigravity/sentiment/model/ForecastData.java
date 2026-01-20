@@ -9,6 +9,7 @@ public class ForecastData {
 
     // New Table Fields
     private final StringProperty signal; // "STEIGT", "FAELLT", "SEITWAERTS", "PANIC", "NEUTRAL"
+    private final StringProperty lastSignal; // e.g. "2026-01-19: STEIGT"
     private final StringProperty date; // Single date
     private final StringProperty sentiment; // "42% L / 58% S"
     private final StringProperty vix; // "15"
@@ -23,13 +24,14 @@ public class ForecastData {
     private final StringProperty explanation;
 
     public ForecastData(String asset, String assetPath, String date,
-            String signal, String sentiment, String vix,
+            String signal, String lastSignal, String sentiment, String vix,
             String consensus, String indicators,
             String upProb, String sideProb, String downProb, String explanation) {
         this.asset = new SimpleStringProperty(asset);
         this.assetPath = assetPath;
         this.date = new SimpleStringProperty(date);
         this.signal = new SimpleStringProperty(signal);
+        this.lastSignal = new SimpleStringProperty(lastSignal);
         this.sentiment = new SimpleStringProperty(sentiment);
         this.vix = new SimpleStringProperty(vix);
         this.consensus = new SimpleStringProperty(consensus);
@@ -55,6 +57,10 @@ public class ForecastData {
 
     public StringProperty signalProperty() {
         return signal;
+    }
+
+    public StringProperty lastSignalProperty() {
+        return lastSignal;
     }
 
     public StringProperty sentimentProperty() {
@@ -91,6 +97,10 @@ public class ForecastData {
 
     public String getSignal() {
         return signal.get();
+    }
+
+    public String getLastSignal() {
+        return lastSignal.get();
     }
 
     public StringProperty explanationProperty() {

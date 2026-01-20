@@ -264,6 +264,59 @@ public class SentimentMonitor extends Application {
             }
         });
 
+        TableColumn<ForecastData, String> lastSignalCol = new TableColumn<>("Last Signal");
+        lastSignalCol.setCellValueFactory(new PropertyValueFactory<>("lastSignal"));
+        lastSignalCol.setPrefWidth(80); // Reduced width since it's just an icon now
+        lastSignalCol.setCellFactory(column -> new TableCell<ForecastData, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    // Reuse the same logic as Signal column for consistency
+                    Text icon = new Text();
+                    icon.setStyle("-fx-font-weight: bold; -fx-font-size: 18px;");
+
+                    switch (item.toUpperCase()) {
+                        case "STEIGT":
+                            icon.setText("▲");
+                            icon.setFill(Color.GREEN);
+                            setGraphic(icon);
+                            setText(null);
+                            break;
+                        case "FAELLT":
+                            icon.setText("▼");
+                            icon.setFill(Color.RED);
+                            setGraphic(icon);
+                            setText(null);
+                            break;
+                        case "SEITWAERTS":
+                            icon.setText("▶");
+                            icon.setFill(Color.GRAY);
+                            setGraphic(icon);
+                            setText(null);
+                            break;
+                        case "PANIC":
+                            setText("STOP");
+                            setTextFill(Color.WHITE);
+                            setStyle("-fx-background-color: red; -fx-alignment: center; -fx-font-weight: bold;");
+                            setGraphic(null);
+                            break;
+                        default:
+                            setText(item);
+                            setGraphic(null);
+                            setStyle("");
+                            break;
+                    }
+                    if (!"PANIC".equals(item.toUpperCase())) {
+                        setStyle("-fx-alignment: center;");
+                    }
+                }
+            }
+        });
+
         TableColumn<ForecastData, String> dateCol = new TableColumn<>("Datum");
         dateCol.setCellValueFactory(new PropertyValueFactory<>("date"));
         dateCol.setPrefWidth(100);
@@ -290,7 +343,7 @@ public class SentimentMonitor extends Application {
         });
 
         // Add columns to table
-        table.getColumns().addAll(assetCol, signalCol, dateCol, sentimentCol, explCol);
+        table.getColumns().addAll(assetCol, signalCol, lastSignalCol, dateCol, sentimentCol, explCol);
 
         // Double-click interaction
         table.setRowFactory(tv -> {

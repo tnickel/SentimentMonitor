@@ -11,8 +11,9 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 
 public class SentimentCrawler {
 
@@ -64,6 +65,21 @@ public class SentimentCrawler {
             // Determine Signal
             String signal = determineSignal(analysis);
 
+            // Determine Last Signal (Previous File)
+            String lastSignal = "";
+            if (textFiles.length > 1) {
+                try {
+                    // textFiles[0] is newest, textFiles[1] is one before
+                    File lastFile = textFiles[1];
+                    String lastContent = Files.readString(lastFile.toPath());
+                    FullAnalysisData lastAnalysis = parser.parseFullAnalysis(lastContent);
+                    String lastSig = determineSignal(lastAnalysis);
+                    lastSignal = lastSig;
+                } catch (Exception e) {
+                    lastSignal = "Error";
+                }
+            }
+
             String sentiment = analysis.getFxssiLong() + " L / " + analysis.getFxssiShort() + " S";
             String indicators = "RSI=" + analysis.getRsi() + ", ATR=" + analysis.getAtr();
 
@@ -108,6 +124,7 @@ public class SentimentCrawler {
                     assetDir.getAbsolutePath(),
                     analysis.getDate(),
                     signal,
+                    lastSignal,
                     sentiment,
                     analysis.getVix(),
                     analysis.getConsensusNumbers(),
