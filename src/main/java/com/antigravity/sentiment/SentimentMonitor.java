@@ -317,6 +317,48 @@ public class SentimentMonitor extends Application {
             }
         });
 
+        TableColumn<ForecastData, String> fxssiCol = new TableColumn<>("FXSSI");
+        fxssiCol.setCellValueFactory(new PropertyValueFactory<>("fxssiSignal"));
+        fxssiCol.setPrefWidth(80);
+        fxssiCol.setCellFactory(column -> new TableCell<ForecastData, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    Text icon = new Text();
+                    icon.setStyle("-fx-font-weight: bold; -fx-font-size: 18px;");
+
+                    String s = item.toUpperCase();
+                    if (s.contains("BUY") || s.contains("LONG")) {
+                        icon.setText("▲");
+                        icon.setFill(Color.GREEN);
+                        setGraphic(icon);
+                        setText(null);
+                    } else if (s.contains("SELL") || s.contains("SHORT")) {
+                        icon.setText("▼");
+                        icon.setFill(Color.RED);
+                        setGraphic(icon);
+                        setText(null);
+                    } else if (s.contains("NEUTRAL") || s.contains("SEITWAERTS")) {
+                        icon.setText("▶");
+                        icon.setFill(Color.GRAY);
+                        setGraphic(icon);
+                        setText(null);
+                    } else {
+                        setText(item);
+                        setGraphic(null);
+                        setStyle("-fx-alignment: center;");
+                        setTextFill(Color.BLACK);
+                        return; // Exit
+                    }
+                    setStyle("-fx-alignment: center;");
+                }
+            }
+        });
+
         TableColumn<ForecastData, String> dateCol = new TableColumn<>("Datum");
         dateCol.setCellValueFactory(new PropertyValueFactory<>("date"));
         dateCol.setPrefWidth(100);
@@ -329,8 +371,9 @@ public class SentimentMonitor extends Application {
         explCol.setCellValueFactory(new PropertyValueFactory<>("explanation"));
         // explCol.setPrefWidth(400); // Removed fixed width
         // Bind width to remaining space: Table Width - (Asset(100) + Signal(80) +
+        // Last(80) + FXSSI(80) +
         // Date(100) + Sentiment(120) + Scrollbar(~20))
-        explCol.prefWidthProperty().bind(table.widthProperty().subtract(420));
+        explCol.prefWidthProperty().bind(table.widthProperty().subtract(500));
         // Enable text wrapping
         explCol.setCellFactory(tc -> {
             TableCell<ForecastData, String> cell = new TableCell<>();
@@ -343,7 +386,7 @@ public class SentimentMonitor extends Application {
         });
 
         // Add columns to table
-        table.getColumns().addAll(assetCol, signalCol, lastSignalCol, dateCol, sentimentCol, explCol);
+        table.getColumns().addAll(assetCol, signalCol, lastSignalCol, fxssiCol, dateCol, sentimentCol, explCol);
 
         // Double-click interaction
         table.setRowFactory(tv -> {

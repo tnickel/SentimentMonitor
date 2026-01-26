@@ -137,6 +137,7 @@ public class SentimentCrawler {
                     analysis.getDate(),
                     signal,
                     lastSignal,
+                    analysis.getCsvSignal(), // FXSSI raw signal
                     sentiment,
                     analysis.getVix(),
                     analysis.getConsensusNumbers(),

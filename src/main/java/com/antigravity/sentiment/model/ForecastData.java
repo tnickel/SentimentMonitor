@@ -10,6 +10,7 @@ public class ForecastData {
     // New Table Fields
     private final StringProperty signal; // "STEIGT", "FAELLT", "SEITWAERTS", "PANIC", "NEUTRAL"
     private final StringProperty lastSignal; // e.g. "2026-01-19: STEIGT"
+    private final StringProperty fxssiSignal; // New: Raw FXSSI Signal
     private final StringProperty date; // Single date
     private final StringProperty sentiment; // "42% L / 58% S"
     private final StringProperty vix; // "15"
@@ -24,7 +25,7 @@ public class ForecastData {
     private final StringProperty explanation;
 
     public ForecastData(String asset, String assetPath, String date,
-            String signal, String lastSignal, String sentiment, String vix,
+            String signal, String lastSignal, String fxssiSignal, String sentiment, String vix,
             String consensus, String indicators,
             String upProb, String sideProb, String downProb, String explanation) {
         this.asset = new SimpleStringProperty(asset);
@@ -32,6 +33,7 @@ public class ForecastData {
         this.date = new SimpleStringProperty(date);
         this.signal = new SimpleStringProperty(signal);
         this.lastSignal = new SimpleStringProperty(lastSignal);
+        this.fxssiSignal = new SimpleStringProperty(fxssiSignal);
         this.sentiment = new SimpleStringProperty(sentiment);
         this.vix = new SimpleStringProperty(vix);
         this.consensus = new SimpleStringProperty(consensus);
@@ -61,6 +63,10 @@ public class ForecastData {
 
     public StringProperty lastSignalProperty() {
         return lastSignal;
+    }
+
+    public StringProperty fxssiSignalProperty() {
+        return fxssiSignal;
     }
 
     public StringProperty sentimentProperty() {
@@ -101,6 +107,10 @@ public class ForecastData {
 
     public String getLastSignal() {
         return lastSignal.get();
+    }
+
+    public String getFxssiSignal() {
+        return fxssiSignal.get();
     }
 
     public StringProperty explanationProperty() {
