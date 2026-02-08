@@ -1,6 +1,7 @@
 package com.antigravity.sentiment;
 
 import com.antigravity.sentiment.config.ConfigManager;
+import com.antigravity.sentiment.logic.CsvSignalImporter;
 import com.antigravity.sentiment.logic.SentimentCrawler;
 import com.antigravity.sentiment.model.ForecastData;
 import com.antigravity.sentiment.model.HistoryData;
@@ -12,6 +13,7 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.DirectoryChooser;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
@@ -110,7 +112,11 @@ public class SentimentMonitor extends Application {
         MenuItem itemThresholds = new MenuItem("Schwellwerte konfigurieren...");
         itemThresholds.setOnAction(e -> showThresholdDialog(stage));
 
-        menuSettings.getItems().addAll(itemSetRoot, itemThresholds, itemCsvConfig); // Combined add calls
+        // CSV Import
+        MenuItem itemCsvImport = new MenuItem("CSV Signale importieren...");
+        itemCsvImport.setOnAction(e -> importCsvSignals(stage));
+
+        menuSettings.getItems().addAll(itemSetRoot, itemThresholds, itemCsvConfig, itemCsvImport);
 
         menuBar.getMenus().add(menuSettings);
 
@@ -159,6 +165,43 @@ public class SentimentMonitor extends Application {
             alert.showAndWait();
         } catch (Exception ex) {
             Alert alert = new Alert(Alert.AlertType.ERROR, "Fehler beim Speichern:\n" + ex.getMessage());
+            alert.showAndWait();
+        }
+    }
+
+    private void importCsvSignals(Stage stage) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("CSV Signale importieren");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("CSV Dateien", "*.csv", "*.txt"));
+
+        File file = fileChooser.showOpenDialog(stage);
+        if (file == null) {
+            return;
+        }
+
+        try {
+            CsvSignalImporter importer = new CsvSignalImporter();
+            List<ForecastData> imported = importer.importFromFile(file);
+
+            if (imported.isEmpty()) {
+                Alert alert = new Alert(Alert.AlertType.WARNING,
+                        "Keine gültigen Signale in der Datei gefunden.");
+                alert.showAndWait();
+                return;
+            }
+
+            // Replace existing data with imported data
+            tableData.clear();
+            tableData.addAll(imported);
+
+            Alert alert = new Alert(Alert.AlertType.INFORMATION,
+                    imported.size() + " Signale erfolgreich importiert.");
+            alert.showAndWait();
+
+        } catch (Exception ex) {
+            Alert alert = new Alert(Alert.AlertType.ERROR,
+                    "Fehler beim Importieren:\n" + ex.getMessage());
             alert.showAndWait();
         }
     }
